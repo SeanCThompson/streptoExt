@@ -1013,7 +1013,7 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
 
     if(world[i][j].val2){
       tot_antib_genes+=world[i][j].val4;
-      fprintf(fp, " %d %s %d %f %f ",world[i][j].val2, world[i][j].seq, world[i][j].crow, world[i][j].fval, world[i][j].fval2);
+      fprintf(fp, " %d %s ",world[i][j].val2, world[i][j].seq);
       if(world[i][j].val4){
         for (int k=0; k<strlen(world[i][j].seq); k++){
           if(world[i][j].seq[k]=='A') fprintf(fp, "%d,",world[i][j].valarray[k]);
@@ -1021,6 +1021,8 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
       }else{
         fprintf(fp,","); // this is so that you know there is nothing (!=0 - which is a valid AB ), and hopefully every piece of python breaks on this? 
       }
+
+      fprintf(fp, " %f %f,",world[i][j].fval, world[i][j].fval2); // print the metabolic switching probabilities
     }else{
       fprintf(fp," 0 n 0,"); 
     }
