@@ -98,6 +98,7 @@ void Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this 
 void UpdateABproduction(int row, int col);        // Places new antibiotics in the field
 void ChangeSeasonMix(TYPE2 **world);                 // "Sporulates" bacteria, shuffle spore position and restarts the field
 void ChangeSeasonNoMix(TYPE2 **world);                 // "Sporulates" bacteria and restarts the field, NO spore shuffling
+void MetabolicSwitch(TYPE2 **world, int row, int col); // Determines the mode of metabolism that the cell will be in for the timestep.
 
 //Printing, plotting, painting.
 void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R); 
@@ -410,7 +411,7 @@ void NextState(int row,int col)
                         
         double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]); //calculates replication probability
         //if cell has no fitness genes in genome it cannot reproduce
-        if(nei->val3==0 || repprob<=0.000000000001) continue;
+        if(nei->val3==0 || repprob<=0.000000000001 || nei->crow == 1) continue;
         //save direction
         dirarray[counter]=k;
 
@@ -460,6 +461,10 @@ void NextState(int row,int col)
       world[row][col]=TYPE2_empty; // kill - i.e. we remove the bacterium
     }else{
       //MOVEMENT
+      
+      //Call to update metabolic switch goes here
+      MetabolicSwitch(world, row, col);
+
       UpdateABproduction(row, col);
       //now we will try to move
       if(p_movement>0.){
@@ -807,7 +812,30 @@ void Mutate(TYPE2** world, int row, int col)
     genome_size++;
     icell->seq[genome_size]='\0';
   }  
-  
+
+
+  //Mutate transition probabilities
+  //note that mutation rate is currently fixed at 0.01. This should be made into an input param
+  icell->fval = icell->fval + ((genrand_real1() * 2) -1.) * 0.01;
+  icell->fval2 = icell->fval2 + ((genrand_real1() * 2) -1.) * 0.01;
+
+  // Clamp transition probabilities to [0 1]
+  if(icell->fval > 1.){
+    icell->fval = 1.;
+  }
+
+  if(icell->fval < 0.){
+    icell->fval = 0.;
+  }
+
+  if(icell->fval2 > 1.){
+    icell->fval2 = 1.;
+  }
+
+  if(icell->fval2 < 0.){
+    icell->fval2 = 0.;
+  }
+
 }
 
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2* icel){
@@ -882,6 +910,8 @@ void Regulation0(TYPE2 *icel){
   icel->val4=Genome2genenumber(icel->seq,'A');
   icel->val5=Genome2genenumber(icel->seq,'H');
 
+  icel->crow = 0; // Initialise the new bacteria in the primary metabolism state
+
   double fg = icel->val3; 
   double ag = icel->val4; 
   
@@ -897,7 +927,7 @@ void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
   int i,k;
-  if( icell->val4==0 || icell->fval4<0.000000000001) return;//if you don't have antib genes, surely no ab are placed
+  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->crow == 0) return;//if you don't have antib genes, surely no ab are placed
 
   int howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
   int which_ab[MAXSIZE];
@@ -983,7 +1013,7 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
 
     if(world[i][j].val2){
       tot_antib_genes+=world[i][j].val4;
-      fprintf(fp, " %d %s ",world[i][j].val2, world[i][j].seq);
+      fprintf(fp, " %d %s %d %f %f ",world[i][j].val2, world[i][j].seq, world[i][j].crow, world[i][j].fval, world[i][j].fval2);
       if(world[i][j].val4){
         for (int k=0; k<strlen(world[i][j].seq); k++){
           if(world[i][j].seq[k]=='A') fprintf(fp, "%d,",world[i][j].valarray[k]);
@@ -1248,6 +1278,8 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
     {
       world[i][j].val=1+count%10;
       world[i][j].val2=1+count;
+      world[i][j].fval=genrand_real1();
+      world[i][j].fval2=genrand_real1();
       antib_counter += 17;
       
       for(k=0;k<init_genome_size+nr_H_genes_to_stay_alive;k++){
@@ -1291,5 +1323,30 @@ void Exit(int exit_number){
   fprintf(stderr,"\nwill exit now, with exit_number %d\n",exit_number);
   
   exit(exit_number);
+
+}
+
+
+void MetabolicSwitch(TYPE2 **world, int row, int col){
+  TYPE2 *icell;
+  icell=&world[row][col];
+
+
+  switch(icell->crow){
+    case 0:
+      if(icell->fval > genrand_real1() && icell->val4 > 0){
+        icell->crow = 1;
+      }
+    break;
+
+    case 1:
+      if(icell->fval2 > genrand_real1() && icell->val3 > 0){
+        icell->crow = 0;
+      }
+    break;
+
+    default:
+      icell->crow = 0;
+  }
 
 }
