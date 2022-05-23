@@ -171,7 +171,7 @@ double h_growth=10.; // nr. of growth genes for half max growth rate
 double h_antib_act=3.; // nr. of antibiotic genes for half max ab production rate
 
 double constABprod = 0.; //constitutive antibiotic production, default = 0.
-double scaling_factor_max_ab_prod_per_unit_time = 1.; // make this smaller to reduce AB prod, DO NOT MAKE THIS LARGER THAN 1. (default = 1.)
+double scaling_factor_max_ab_prod_per_unit_time = 0.1; // make this smaller to reduce AB prod, DO NOT MAKE THIS LARGER THAN 1. (default = 1.)
 double max_repl_prob_per_unit_time=0.1; //scales the probability of replication per unit time
 
 int which_regulation=0; //flag to tell the program which regulation function
@@ -920,7 +920,7 @@ void Regulation0(TYPE2 *icel){
   double constABprod_if_ag;
   constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them out of thin air?
   
-  icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act) * (exp(-beta_antib_tradeoff*fg));
+  icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act); // Exponential term removed
 } 
 
 void UpdateABproduction(int row, int col){
