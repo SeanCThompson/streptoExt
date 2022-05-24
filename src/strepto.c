@@ -90,7 +90,7 @@ struct point *ab_poslist; //2D array used to efficiently randomize antibiotics p
 int len_ab_poslist; //size of ab_poslist
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
 void InitialiseFromInput(const char* par_fileinput_name,TYPE2 **world,TYPE2 **antib);
-void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **antib);
+void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, TYPE2 **world,TYPE2 **antib);
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib);
 
 //// Biological function declarations
@@ -133,6 +133,8 @@ int par_movie_period = 20;
 int par_outputdata_period = 100;
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
+double init_g_to_a=0.; // initial g to a transition prob. Only used for initialisation from a genome
+double init_a_to_g=0; // initial g to a transition prob. Only used for initialisation from a genome
 int initialise_from_singlegenome=0;
 char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
 int initialise_from_input=0;
@@ -180,7 +182,12 @@ void (*pt_Regulation)(TYPE2 *icel); // pointer to the regulation function (in ca
 int scramble_genome_btwn_seasons = 0; // if 1 it scrambles the gene order on the chromosome at the beginning of each season
 int perfectmix=0; // if 1, mixes the world plane every time step
 
+char par_abrepl_log[MAXSIZE]="ab_mut_log.txt"; //genome alphabet
+int change_season_at_initialisation_from_input = 0; // default is to start with full field from input data, and sporulate, i.e. changeseason
+int logging_mode = 0;
+
 TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} }; // zero the all values in a TYPE2 variable
+int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 void Initial(void)
 {
@@ -213,7 +220,9 @@ void Initial(void)
     else if(strcmp(readOut, "-spore_fraction") == 0) spore_fraction = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-maxtime") == 0) MaxTime = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] ); 
-                                                   strcpy( init_ab_gen , argv_g[i+2] ); i++; 
+                                                   strcpy( init_ab_gen , argv_g[i+2] ); 
+                                                   init_g_to_a=atof( argv_g[i+3] ); 
+                                                   init_a_to_g=atof( argv_g[i+4] ); i++; i++; i++; 
                                                    init_genome_size=strlen(init_genome);}
     else if(strcmp(readOut, "-max_ab_prod_per_unit_time") == 0) max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
@@ -237,6 +246,8 @@ void Initial(void)
     else if(strcmp(readOut, "-constABprod") == 0) constABprod = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-scaling_factor_max_ab_prod_per_unit_time") == 0) scaling_factor_max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-h_growth") == 0) h_growth= atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-v") == 0) logging_mode = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -249,7 +260,27 @@ void Initial(void)
     strcat(par_fileoutput_name,".txt");
     strcpy(par_movie_directory_name,"movie_");
     strcat(par_movie_directory_name,par_name);
-    fprintf(stderr,"Output file name: %s\n Output movie dir name: %s\n",par_fileoutput_name,par_movie_directory_name);
+
+    switch (logging_mode) 
+    {
+    case 0:
+      fprintf(stderr,"Output file name: %s\nOutput movie dir name: %s\n",par_fileoutput_name,par_movie_directory_name);
+      printf("Normal logging mode.\n");
+      break;
+    
+    case 1:
+      strcpy(par_abrepl_log,"ab_mut_log_");
+      strcat(par_abrepl_log,par_name);
+      strcat(par_abrepl_log,".txt");
+
+      fprintf(stderr,"Output file name: %s\nOutput movie dir name: %s\nOutput logfile name: %s\n",par_fileoutput_name,par_movie_directory_name,par_abrepl_log);
+      printf("Verbose logging mode.\n");
+      break;
+
+    default:
+      break;
+    }
+    
   }
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
@@ -261,7 +292,11 @@ void Initial(void)
   if(strlen(par_fileinput_name)){
     FILE *fp = fopen(par_fileinput_name,"r"); 
     if(!fp){ fprintf(stderr, "Initial(): Error. Input file %s does not exist, simulation not starting\n",par_fileoutput_name); Exit(1);}
-    else {initialise_from_input=1;fclose(fp);}
+    else {
+      fprintf(stderr,"change_season_at_initialisation_from_input = %d\n", change_season_at_initialisation_from_input);
+      initialise_from_input=1;
+      fclose(fp);
+    }
   }
 
   nplane = 5; /* # of planes (default=0)*/
@@ -327,7 +362,7 @@ void InitialPlane(void){
   
   // Initialisation of the grid with a bunch of cells - or one, depending on the flags set in Initial()
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
-  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, world, antib);
+  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, init_g_to_a, init_a_to_g, world, antib);
   else InitialiseFromScratch(world,antib);
   
   fprintf(stderr,"\n\nworld is ready. Let's go!\n\n");
@@ -444,6 +479,16 @@ void NextState(int row,int col)
         
         // UPON BIRTH WE SET A BUNCH OF PARAMETERS: val3 val4 val5 fval3 fval4
         (*pt_Regulation)(&world[row][col]);
+        world[row][col].fval5 = (double)(global_tag++); 
+      if (logging_mode==1)
+      {
+        FILE *fp;
+        fp= fopen( par_abrepl_log, "a" );
+        fprintf(fp,"%d R: %d %s %d %s\n", Time, (int)(0.5+winner.fval5), winner.seq, (int)(0.5+world[row][col].fval5), world[row][col].seq);
+        fclose(fp);
+      }
+      
+
         
       }
     }
@@ -458,6 +503,15 @@ void NextState(int row,int col)
     // deathprob = 1. - BirthRate( &world[row][col] , &antib[row][col] ) ; // in this version nr_H_genes_to_stay_alive controls only birth rate
                                                                            // this is the case if H are as biosynth genes but do not cause death when missing
     if(genrand_real2()<deathprob){
+      if (logging_mode==1)
+      {
+        FILE *fp;
+        fp= fopen( par_abrepl_log, "a" );
+        fprintf(fp,"%d D: %d %s\n", Time, (int)(0.5+world[row][col].fval5), world[row][col].seq);
+        fclose(fp);
+      }
+
+
       world[row][col]=TYPE2_empty; // kill - i.e. we remove the bacterium
     }else{
       //MOVEMENT
@@ -517,6 +571,33 @@ void Update(void){
       burn_in=0;
       Time=0;
       prob_noABspores_fromouterspace = tmp_prob_noABspores_fromouterspace;   /////// OK BUT DOES THIS WORK ALSO WHEN WE DON'T WANT BURN IN?
+    }
+  }
+
+
+//checks if anybody got to boundaries
+  if(initialise_from_singlegenome){
+    int signal=0;
+    int i,j;
+    int boxsize=70;
+    for(i=nrow/2 - boxsize/2, j=ncol/2 - boxsize/2; j<ncol/2 + boxsize/2; j++){
+      if(world[i][j].val2>0) signal=1;
+    }
+    for(i=nrow/2 + boxsize/2, j=ncol/2 - boxsize/2; j<ncol/2 + boxsize/2; j++){
+      if(world[i][j].val2>0) signal=1;
+    }
+    for(i=nrow/2 - boxsize/2, j=ncol/2 - boxsize/2; i<nrow/2 + boxsize/2; i++){
+      if(world[i][j].val2>0) signal=1;
+    }
+    for(i=nrow/2 - boxsize/2, j=ncol/2 + boxsize/2; i<nrow/2 + boxsize/2; i++){
+      if(world[i][j].val2>0) signal=1;
+    }
+    if(signal && logging_mode==1){
+      FILE *fp;
+      fp= fopen( par_abrepl_log, "a" );
+      fprintf(fp,"%d E: bye\n", Time);
+      fclose(fp);
+      Exit(0);
     }
   }
 
@@ -663,6 +744,16 @@ void ChangeSeasonMix(TYPE2 **world)
       }
       world[ipos][jpos].val=1+i%10;
       world[ipos][jpos].val2=1+i;
+      world[ipos][jpos].fval5=(double)(global_tag++);
+
+      if (logging_mode == 1)
+      {
+        FILE *fp;
+        fp= fopen( par_abrepl_log, "a" );
+        fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[ipos][jpos].fval5), world[ipos][jpos].seq);
+        fclose(fp);
+      }
+      
       
     }
   }
@@ -715,6 +806,16 @@ void ChangeSeasonNoMix(TYPE2 **world)
       }
       world[i][j].val = 1+bactnumber%10;
       world[i][j].val2 =1+bactnumber;
+      world[i][j].fval5=(double)(global_tag++);
+
+      if (logging_mode==1)
+      {
+        FILE *fp;
+        fp= fopen( par_abrepl_log, "a" );
+        fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+        fclose(fp);
+      }
+      
       
     }
   }
@@ -930,6 +1031,12 @@ void UpdateABproduction(int row, int col){
   if( icell->val4==0 || icell->fval4<0.000000000001 || icell->crow == 0) return;//if you don't have antib genes, surely no ab are placed
 
   int howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
+  if(howmany_pos_get_ab && logging_mode==1){
+    FILE *fp;
+    fp= fopen( par_abrepl_log, "a" );
+    fprintf(fp,"%d A: %d %s %d\n",Time,(int)(0.5+ icell->fval5), icell->seq,howmany_pos_get_ab);
+    fclose(fp);
+  }
   int which_ab[MAXSIZE];
   int nrtypes=0;
 
@@ -1168,7 +1275,7 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
           world[i][j].val = 1+val2%10;
           world[i][j].val2 = val2;
           
-          //world[i][j].fval5=(double)(global_tag++); //to be used for log file
+          world[i][j].fval5=(double)(global_tag++); //to be used for log file
           
           strcpy(world[i][j].seq,token);
           int genomelen = strlen(world[i][j].seq); world[i][j].seq[genomelen]='\0';
@@ -1212,11 +1319,27 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
   }
   // fprintf(stderr,"InitialiseFromInput(): Error. I don't exist yet!\n");
   // Exit(1);
-  if(mix_between_seasons) ChangeSeasonMix(world);
-  else ChangeSeasonNoMix(world);
+  if(change_season_at_initialisation_from_input){
+    if(mix_between_seasons) ChangeSeasonMix(world);
+    else ChangeSeasonNoMix(world);
+  }else{
+    // else we have to initialise the log file here, because it's not taken care by changeseason
+    if(logging_mode==1){
+      FILE *fp;
+      fp= fopen( par_abrepl_log, "a" );
+      for(i=1;i<=nrow;i++){
+        for(j=1;j<=ncol;j++){
+          if(world[i][j].val2 != 0)
+            fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+        }
+      }
+      fclose(fp);
+    }
+
+  }
 }
 
-void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE2 **world,TYPE2 **antib){
+void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, TYPE2 **world,TYPE2 **antib){
   int i,j,k;
   const char sepab[2]=",";
   char *token2;
@@ -1237,8 +1360,12 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
   world[i][j].val2=2;
   strcpy( world[i][i].seq, init_genome);
   world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+  world[i][j].fval=init_g_to_a;
+  world[i][j].fval2=init_a_to_g;
+  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_g_to_a);
+  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_a_to_g);
   
-  //world[i][j].fval5=(double)(global_tag++);
+  world[i][j].fval5=(double)(global_tag++);
 
   if(Genome2genenumber(world[i][j].seq, 'A') ){
     token2 = strtok(init_ab_gen,sepab);
@@ -1260,6 +1387,14 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, TYPE
   }
 
   (*pt_Regulation)(&world[i][j]);
+
+  if (logging_mode==1)  
+  {
+    FILE *fp;
+    fp= fopen( par_abrepl_log, "a" );
+    fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+    fclose(fp);
+  }
 
 }
 
