@@ -374,6 +374,7 @@ print("Plotting")
 
 # fig, ax = plt.subplots(2,2)
 fig = plt.figure()
+fig.canvas.set_window_title(sys.argv[1])
 gs = gridspec.GridSpec(4, 4)
 ax=[]
 ax.append([fig.add_subplot(gs[0:2, 0:2]), fig.add_subplot(gs[0:2,2:4])] )
