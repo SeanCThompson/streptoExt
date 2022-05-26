@@ -91,7 +91,7 @@ int len_ab_poslist; //size of ab_poslist
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
 void InitialiseFromInput(const char* par_fileinput_name,TYPE2 **world,TYPE2 **antib);
 void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, TYPE2 **world,TYPE2 **antib);
-void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib);
+void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib,double breakpoint_init);
 
 //// Biological function declarations
 void Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
@@ -129,8 +129,8 @@ static TYPE2** R; //nr. of break points
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
-int par_movie_period = 20;
-int par_outputdata_period = 100;
+int par_movie_period = 500; // Sets the png generation period (timesteps between logging the worldstate)
+int par_outputdata_period = 500; // Set's the data logging period (timesteps between logging the worldstate)
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 double init_g_to_a=0.; // initial g to a transition prob. Only used for initialisation from a genome
@@ -149,6 +149,7 @@ int par_season_duration=2500; // nr. of time steps for one growth cycle
 double ddrate=0.001; //per-gene duplication and deletion probability
 double prob_new_brpoint = 0.01; //inflow of one new randomly placed breakpoints, per replication
 double breakprob=0.01;//0.005; // probability of activating a break point
+double breakpoint_init=0.2; //rate of breakpoint in initial genomes
 double prob_mut_antibtype_perbit = 0.05; //per bit probability of antibiotic type mutation
 
 double spore_fraction=0.001; // fraction of nrow*ncol that sporulates -- i.e. probability that an individual is sampled to become a spore
@@ -243,6 +244,7 @@ void Initial(void)
     else if(strcmp(readOut, "-scramble_genome_btwn_seasons") == 0) scramble_genome_btwn_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-breakprob") == 0) breakprob = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-breakpoint_init") == 0) breakpoint_init = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-constABprod") == 0) constABprod = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-scaling_factor_max_ab_prod_per_unit_time") == 0) scaling_factor_max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-h_growth") == 0) h_growth= atof(argv_g[i+1]);
@@ -363,7 +365,7 @@ void InitialPlane(void){
   // Initialisation of the grid with a bunch of cells - or one, depending on the flags set in Initial()
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
   else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, init_g_to_a, init_a_to_g, world, antib);
-  else InitialiseFromScratch(world,antib);
+  else InitialiseFromScratch(world,antib,breakpoint_init);
   
   fprintf(stderr,"\n\nworld is ready. Let's go!\n\n");
   Boundaries2(world);
@@ -1398,7 +1400,7 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, doub
 
 }
 
-void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
+void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact, double breakpoint_init){
   int i,j,k;
 
   int count=1;
@@ -1430,7 +1432,7 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact){
         else{
           world[i][j].seq[k] = AZ[1]; //if no homeost genes needed -> we put none
           if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[2]; // antib
-          if(genrand_real2() < 0.2) world[i][j].seq[k] = AZ[3]; // give break points only once in a while  
+          if(genrand_real2() < breakpoint_init) world[i][j].seq[k] = AZ[3]; // give break points only once in a while  
         }
         
         if( world[i][j].seq[k]=='A') {

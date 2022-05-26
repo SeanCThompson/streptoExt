@@ -120,7 +120,7 @@ for gnm in d_gnm_and_offs:
 
 #Get succesful ancestors
 l_ancestor = []
-nr_offspring_to_count_as_successful = 500 # when is an ancestor successful? when it makes so many offsprings
+nr_offspring_to_count_as_successful = 200 # when is an ancestor successful? when it makes so many offsprings
 for gnm in d_genomes:
     # if d_genomes[gnm]["howmany"]>50: print(gnm,": ",d_genomes[gnm])
     if d_genomes[gnm]["earliest"]==0 and d_genomes[gnm]["howmany_offs"]>nr_offspring_to_count_as_successful:
@@ -228,6 +228,7 @@ for ancestor in l_ancestor:
     # print("Genome: ", designs[-1])
 if print_genomes:
     fig = plt.figure(figsize=(8,6))
+    #print(designs)
     gs = gridspec.GridSpec( len(designs), 2+ sum([ x['opts']['x_extent'] for x in designs[0] ]) )
 
     ax_dna=[]
