@@ -248,7 +248,7 @@ void Initial(void)
     else if(strcmp(readOut, "-constABprod") == 0) constABprod = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-scaling_factor_max_ab_prod_per_unit_time") == 0) scaling_factor_max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-h_growth") == 0) h_growth= atof(argv_g[i+1]);
-    else if(strcmp(readOut, "-v") == 0) logging_mode = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-v") == 0) logging_mode = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
