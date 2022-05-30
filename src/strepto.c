@@ -1087,7 +1087,13 @@ int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R)
     tomovie[i-1][j-1 +1*(ncol)] = antib[i][j].val;
     tomovie[i-1][j-1 +2*(ncol)] = G[i][j].val;
     tomovie[i-1][j-1 +3*(ncol)] = A[i][j].val;
-    tomovie[i-1][j-1 +4*(ncol)] = R[i][j].val;
+    //tomovie[i-1][j-1 +4*(ncol)] = R[i][j].val;
+    if(world[i][j].val>0){
+      tomovie[i-1][j-1 +4*(ncol)] = world[i][j].crow + 1;
+    }
+    else{
+      tomovie[i-1][j-1 +4*(ncol)] = 0;
+    }
   }
   
   PlanePNG(tomovie,0);
