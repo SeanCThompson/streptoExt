@@ -229,7 +229,8 @@ void Initial(void)
     else if(strcmp(readOut, "-prob_mut_antibtype_tot") == 0) prob_mut_antibtype_tot = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-nr_Hgenes_to_stay_alive") == 0) nr_H_genes_to_stay_alive = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-which_regulation") == 0) which_regulation = atoi(argv_g[i+1]);
-    else if(strcmp(readOut, "-input") == 0) strcpy( par_fileinput_name , argv_g[i+1] );
+    else if(strcmp(readOut, "-input") == 0) {strcpy( par_fileinput_name , argv_g[i+1] );
+                                            initialise_from_input=1;}
     else if(strcmp(readOut, "-ddrate") == 0) ddrate = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-scramble_genome_btwn_seasons") == 0) scramble_genome_btwn_seasons = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-perfectmix") == 0) perfectmix = atoi(argv_g[i+1]);
@@ -1181,6 +1182,15 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
           if(Genome2genenumber(world[i][j].seq, 'A') ){
             token = strtok(NULL, sep);      //AB genes of this guy
             strcpy(fab_string, token);
+        
+            token = strtok(NULL, sep);      // regulation param in field at this pos
+            world[i][j].fval = atof(token);
+            token = strtok(NULL, sep);      // regulation param in field at this pos
+            char* paramVal = token;
+            int size = strlen(paramVal);
+            paramVal[size-2] = '\0';
+            world[i][j].fval2 = atof(paramVal);
+
             token2 = strtok(fab_string,sepab);
             
             for(k=0;k<MAXSIZE;k++){
@@ -1199,6 +1209,8 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
             }
           }
           
+
+
           (*pt_Regulation)(&world[i][j]); // sets regulation parameters
 
         }else{
