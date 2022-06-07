@@ -118,6 +118,8 @@ void ScrambleGenomeBtwnSeasons(TYPE2* icel);
 // It is accessed by function pointers in the code - this is going to be fun
 void Regulation0(TYPE2 *icel); //Old version of regulation - this works well
 
+int GetAntibCount(TYPE2 **antib, int row, int col); // Counts antibiotics at point in plane
+
 // Static global data structures and parameters
 static TYPE2** world; // the world where bacteria live
 static TYPE2** antib; // the antibiotic plane
@@ -129,8 +131,8 @@ static TYPE2** R; //nr. of break points
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
-int par_movie_period = 500; // Sets the png generation period (timesteps between logging the worldstate)
-int par_outputdata_period = 500; // Set's the data logging period (timesteps between logging the worldstate)
+int par_movie_period = 10000; // Sets the png generation period (timesteps between logging the worldstate)
+int par_outputdata_period = 10000; // Set's the data logging period (timesteps between logging the worldstate)
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 double init_g_to_a=0.; // initial g to a transition prob. Only used for initialisation from a genome
@@ -544,6 +546,43 @@ void Update(void){
   static int how_long_no_antib=0;
   int n_antib;
   if(perfectmix) PerfectMix(world);
+
+  
+  double abDegRate = 0.05;
+  TYPE2 *icell;
+  int size;
+  
+
+  for (int i = 1; i < nrow+1; i++)
+  {
+    for (int j = 1; j < ncol+1; j++)
+    {
+      icell=&antib[i][j];
+      icell->val2 = 0;
+      
+      
+      size = GetAntibCount(antib, i, j);
+      //fprintf(stderr, "Non-zero count %d\n", size);
+      if (size == 0){
+        continue;
+      }
+
+      for (int k = 0; k < size; k++)
+      {
+        if (abDegRate > genrand_real1())
+        {
+          icell->valarray[k] = 0;
+          icell->val2 = icell->val2 - 1;
+          for (int p = k+1; p < 1023; p++)
+          {
+            icell->valarray[p] = icell->valarray[p+1];
+          }
+        }
+      }
+    }
+  }
+  
+
   
   Asynchronous(); 
   
@@ -1506,4 +1545,26 @@ void MetabolicSwitch(TYPE2 **world, int row, int col){
       icell->crow = 0;
   }
 
+}
+
+int GetAntibCount(TYPE2 **antib, int row, int col){
+  TYPE2 *icell;
+  icell=&antib[row][col];
+
+  int run = 1;
+  int i  = 0;
+  int size = 0;
+
+  while (run==1)
+  {
+    if (icell->valarray[i] > 0)
+    {
+      size++;
+      i++;
+    }else{
+      run = 0;
+    }
+    
+  }
+  return size;
 }
