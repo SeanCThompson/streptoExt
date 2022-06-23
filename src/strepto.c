@@ -27,10 +27,12 @@ typedef struct __type2{
   double fval5; //unused
   char seq[1024]; // genome, a string composed of many F, A, B, H 
   char str[1024]; //unused
+  int state; //unused
   int crow; //unused
   int ccol; //unused
   int valarray[1024]; // corresponding to the positions where there is an antibiotic gene in seq, there is a bitstring (represented as integer) here that specifies the antiobiotic type
-  
+  float concarray[1024]; //
+
   int valarray2[1024]; //unused
   int len_valarray2; //unused
   int ghash; //unused
@@ -52,6 +54,7 @@ typedef struct __type2{
   double fval5; //unused
   char seq[1024]; //unused
   char str[1024]; //unused
+  int state; //unused
   int crow; //unused
   int ccol; //unused
   
@@ -92,6 +95,7 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
 void InitialiseFromInput(const char* par_fileinput_name,TYPE2 **world,TYPE2 **antib);
 void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, TYPE2 **world,TYPE2 **antib);
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib,double breakpoint_init);
+void InitialiseTestCase(TYPE2 **world);
 
 //// Biological function declarations
 void Mutate(TYPE2 **world, int row, int col);      // Mutate the genome at this position
@@ -131,7 +135,7 @@ static TYPE2** R; //nr. of break points
 char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
-int par_movie_period = 10000; // Sets the png generation period (timesteps between logging the worldstate)
+int par_movie_period = 500; // Sets the png generation period (timesteps between logging the worldstate)
 int par_outputdata_period = 10000; // Set's the data logging period (timesteps between logging the worldstate)
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
@@ -142,6 +146,7 @@ char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_str
 int initialise_from_input=0;
 int antib_with_bitstring=1; // 1: Antibiotic with bistring; 0: antib without bitstrings - keep this to 1
 int init_genome_size = 20; // initial genome size
+int initialise_from_test_case=0;
 
 static char* AZ="HFAB"; //genome alphabet
 int MAXRADIUS = 10; //max distance from bacterium at which antibiotics are placed
@@ -189,7 +194,7 @@ char par_abrepl_log[MAXSIZE]="ab_mut_log.txt"; //genome alphabet
 int change_season_at_initialisation_from_input = 0; // default is to start with full field from input data, and sporulate, i.e. changeseason
 int logging_mode = 0;
 
-TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,{0} }; // zero the all values in a TYPE2 variable
+TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,0,{0}, {0.} }; // zero the all values in a TYPE2 variable
 int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 void Initial(void)
@@ -253,6 +258,8 @@ void Initial(void)
     else if(strcmp(readOut, "-h_growth") == 0) h_growth= atof(argv_g[i+1]);
     else if(strcmp(readOut, "-v") == 0) logging_mode = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-test_case") == 0) initialise_from_test_case = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-movement") == 0) p_movement = atof(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -368,6 +375,7 @@ void InitialPlane(void){
   // Initialisation of the grid with a bunch of cells - or one, depending on the flags set in Initial()
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
   else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, init_g_to_a, init_a_to_g, world, antib);
+  else if(initialise_from_test_case) InitialiseTestCase(world);
   else InitialiseFromScratch(world,antib,breakpoint_init);
   
   fprintf(stderr,"\n\nworld is ready. Let's go!\n\n");
@@ -413,7 +421,9 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
       h=0;
       for(k=0; icel->seq[k]!='\0'; k++){
         if(icel->seq[k]=='A'){
-          h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
+          if(ab->concarray[i] > 0.5){
+            h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
+          }
           if(hammdist>h) hammdist=h; //check if h is the smallest
         }
       }
@@ -451,7 +461,7 @@ void NextState(int row,int col)
                         
         double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]); //calculates replication probability
         //if cell has no fitness genes in genome it cannot reproduce
-        if(nei->val3==0 || repprob<=0.000000000001 || nei->crow == 1) continue;
+        if(nei->val3==0 || repprob<=0.000000000001 || nei->state == 1) continue;
         //save direction
         dirarray[counter]=k;
 
@@ -547,18 +557,18 @@ void Update(void){
   int n_antib;
   if(perfectmix) PerfectMix(world);
 
-  
-  double abDegRate = 0.05;
+  // Initialise variables for AB degradation
+  float abDegRate = 0.995;
   TYPE2 *icell;
   int size;
   
-
+  // Loop over the world to degrade each AB in each grid space
   for (int i = 1; i < nrow+1; i++)
   {
     for (int j = 1; j < ncol+1; j++)
     {
       icell=&antib[i][j];
-      icell->val2 = 0;
+      //icell->val2 = 0;
       
       
       size = GetAntibCount(antib, i, j);
@@ -567,17 +577,27 @@ void Update(void){
         continue;
       }
 
+      // Loop over each AB in the current grid spot
       for (int k = 0; k < size; k++)
       {
-        if (abDegRate > genrand_real1())
+
+        icell->concarray[k] = icell->concarray[k] * abDegRate;
+
+        // Remove fully decayed AB from the grid spot and shuffle the AB array to remove the gap this creates
+        if (icell->concarray[k] < 0.1 && icell->concarray[k] > 0.000001)
         {
+          icell->concarray[k] = 0.;
           icell->valarray[k] = 0;
           icell->val2 = icell->val2 - 1;
-          for (int p = k+1; p < 1023; p++)
+          for (int p = k; p < 1023; p++)
           {
             icell->valarray[p] = icell->valarray[p+1];
+            icell->concarray[p] = icell->concarray[p+1];
           }
         }
+        
+
+        
       }
     }
   }
@@ -743,6 +763,7 @@ void ChangeSeasonMix(TYPE2 **world)
     antib[i][j].val2=0;
     for(k=0;k<MAXSIZE;k++) {
       antib[i][j].valarray[k]=0;
+      antib[i][j].concarray[k]=0;
       world[i][j].seq[k]='\0';
       world[i][j].valarray[k]=-1;
     }
@@ -814,6 +835,7 @@ void ChangeSeasonNoMix(TYPE2 **world)
     antib[i][j].val2=0;
     for(k=0;k<MAXSIZE;k++){
       antib[i][j].valarray[k]=0;
+      antib[i][j].concarray[k]=0;
     }
     //empty the plane - with small prob, we do not wipe this guys out, because it sporulates
     // in other words, with high prob we wipe people out
@@ -1053,7 +1075,7 @@ void Regulation0(TYPE2 *icel){
   icel->val4=Genome2genenumber(icel->seq,'A');
   icel->val5=Genome2genenumber(icel->seq,'H');
 
-  icel->crow = 0; // Initialise the new bacteria in the primary metabolism state
+  icel->state = 0; // Initialise the new bacteria in the primary metabolism state
 
   double fg = icel->val3; 
   double ag = icel->val4; 
@@ -1062,6 +1084,8 @@ void Regulation0(TYPE2 *icel){
   
   double constABprod_if_ag;
   constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them out of thin air?
+
+  //fprintf(stderr, "max_ab_prod_per_unit_time = %f, scaling_factor_max_ab_prod_per_unit_time = %f, constABprod_if_ag = %f, ag = %f, h_antib_act = %f\n", max_ab_prod_per_unit_time, scaling_factor_max_ab_prod_per_unit_time, constABprod_if_ag, ag, h_antib_act);
   
   icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act); // Exponential term removed
 } 
@@ -1070,9 +1094,11 @@ void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
   int i,k;
-  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->crow == 0) return;//if you don't have antib genes, surely no ab are placed
+  float abDeposit = 0.05; 
+  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->state == 0) return;//if you don't have antib genes, surely no ab are placed
 
-  int howmany_pos_get_ab = bnldev(icell->fval4,len_ab_poslist);
+  int howmany_pos_get_ab = 100 * bnldev(icell->fval4,len_ab_poslist);
+  //fprintf(stderr, "%d %f %d\n", howmany_pos_get_ab, icell->fval4 * len_ab_poslist, len_ab_poslist);
   if(howmany_pos_get_ab && logging_mode==1){
     FILE *fp;
     fp= fopen( par_abrepl_log, "a" );
@@ -1115,12 +1141,14 @@ void UpdateABproduction(int row, int col){
     int found=0;
     for (k=0; k<antib[ii][jj].val2;k++){
       if(antib[ii][jj].valarray[k]== ab_toplace){  //icell->val2){
+        antib[ii][jj].concarray[k]=antib[ii][jj].concarray[k]+abDeposit;
         found=1;
         break;
       }
     }
     if(!found){
       antib[ii][jj].valarray[antib[ii][jj].val2]=ab_toplace;   //icell->val2;
+      antib[ii][jj].concarray[k]=antib[ii][jj].concarray[k]+abDeposit;
       antib[ii][jj].val2++;
       antib[ii][jj].val=antib[ii][jj].val2%10;
     }
@@ -1157,6 +1185,7 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
     if(antib[i][j].val2){
       for(int k=0; k<antib[i][j].val2; k++){
          fprintf(fp,"%d," , antib[i][j].valarray[k]);
+         fprintf(fp,"%f," , antib[i][j].concarray[k]);
       }
     }else fprintf(fp,"0,"); 
 
@@ -1238,7 +1267,7 @@ int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R)
     tomovie[i-1][j-1 +3*(ncol)] = A[i][j].val;
     //tomovie[i-1][j-1 +4*(ncol)] = R[i][j].val;
     if(world[i][j].val>0){
-      tomovie[i-1][j-1 +4*(ncol)] = world[i][j].crow + 1;
+      tomovie[i-1][j-1 +4*(ncol)] = world[i][j].state + 1;
     }
     else{
       tomovie[i-1][j-1 +4*(ncol)] = 0;
@@ -1258,7 +1287,46 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
   for (i=-MAXRADIUS; i<MAXRADIUS+1; i++){
     for (j=-MAXRADIUS; j<MAXRADIUS+1; j++){
       if( sqrt((double)( (i*i)+(j*j) ))<=MAXRADIUS){
-        howmany++; 
+        if( sqrt((double)( (i*i)+(j*j) ))<1){
+          howmany=howmany+500;
+        }else if (sqrt((double)( (i*i)+(j*j) ))<2)
+        {
+          howmany=howmany+308;
+        }else if (sqrt((double)( (i*i)+(j*j) ))<3)
+        {
+          howmany=howmany+124;
+        }else if (sqrt((double)( (i*i)+(j*j) ))<4)
+        {
+          howmany=howmany+66;
+        }else if (sqrt((double)( (i*i)+(j*j) ))<5)
+        {
+          howmany=howmany+32;
+        }else if (sqrt((double)( (i*i)+(j*j) ))<6)
+        {
+          howmany=howmany+11;
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<7)
+        {
+          howmany=howmany+11;
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<8)
+        {
+          howmany=howmany+5;
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<9)
+        {
+          howmany=howmany+3;
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<10)
+        {
+          howmany=howmany+2;
+        }
+        else
+        {
+          howmany=howmany+5;
+        }
+        
+         
       }
     }
   }
@@ -1269,13 +1337,114 @@ void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int
   for (i=-MAXRADIUS; i<MAXRADIUS+1; i++){
     for (j=-MAXRADIUS; j<MAXRADIUS+1; j++){
       if( sqrt((double)( (i*i)+(j*j) ))<=MAXRADIUS){
-        (*p_ab_poslist)[array_pos].row = i;
-        (*p_ab_poslist)[array_pos].col = j;
-        array_pos++;
+        if( sqrt((double)( (i*i)+(j*j) ))<1){
+          for(int ipos = 0; ipos < 500; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<2)
+        {
+          for(int ipos = 0; ipos < 308; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<3)
+        {
+          for(int ipos = 0; ipos < 124; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<4)
+        {
+          for(int ipos = 0; ipos < 66; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<5)
+        {
+          for(int ipos = 0; ipos < 32; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<6)
+        {
+          for(int ipos = 0; ipos < 11; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<7)
+        {
+          for(int ipos = 0; ipos < 11; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<8)
+        {
+          for(int ipos = 0; ipos < 5; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<9)
+        {
+          for(int ipos = 0; ipos < 3; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else if (sqrt((double)( (i*i)+(j*j) ))<10)
+        {
+          for(int ipos = 0; ipos < 2; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+        else
+        {
+          for(int ipos = 0; ipos < 5; ipos++)
+          {
+            (*p_ab_poslist)[array_pos].row = i;
+            (*p_ab_poslist)[array_pos].col = j;
+            array_pos++;
+          }
+        }
+
       }
     }
   }
   
+  // for(int i = 0; i < array_pos; i++){
+  //   fprintf(stderr, "%d, ",(*p_ab_poslist)[i].row);
+  //   fprintf(stderr, "%d, ",(*p_ab_poslist)[i].col);
+  //   fprintf(stderr, "%d \n",i);
+  // }
   return;
 }
 
@@ -1297,6 +1466,7 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
       world[i][j].val = 0;world[i][j].val2 = 0;
       antib[i][j].val = 0;antib[i][j].val2 = 0;
       for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=-1;
+      for(k=0;k<MAXSIZE;k++) antib[i][j].concarray[k]=0.;
       for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
       for(k=0;k<MAXSIZE;k++) world[i][j].valarray[k]='\0';
       line_nr++;
@@ -1410,6 +1580,7 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, doub
     antib[i][j].val2=0;//how many different AB strains
     antib[i][j].val=0;//only for colour
     for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
+    for(k=0;k<MAXSIZE;k++) antib[i][j].concarray[k]=0;
     for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
   }
   
@@ -1469,6 +1640,7 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact, double breakpoint_init){
     antib[i][j].val2=0;//how many different AB strains
     antib[i][j].val=0;//only for colour
     for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
+    for(k=0;k<MAXSIZE;k++) antib[i][j].concarray[k]=0;
     for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
     if( genrand_real1()<0.01) // i==nrow/2 && j==nrow/2)
     {
@@ -1509,6 +1681,52 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact, double breakpoint_init){
   }
 }
 
+void InitialiseTestCase(TYPE2 **world){
+  int i,j,k;
+
+  char genome[4] = "AAA";
+  
+   
+  //Initialise the field
+  for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
+    world[i][j].val=0;//only for colour
+    world[i][j].val2=0;//strain indication
+    antib[i][j].val2=0;//how many different AB strains
+    antib[i][j].val=0;//only for colour
+    for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
+    for(k=0;k<MAXSIZE;k++) antib[i][j].concarray[k]=0;
+    for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
+  }
+  
+  // place sequence in the middle
+  i=nrow/2; j=ncol/2;  
+  world[i][j].val=1;
+  world[i][j].val2=2;
+  //world[i][i].seq[0] =seq;
+  strcpy( world[i][i].seq, genome);
+  //world[i][i].seq[ strlen("A") ]='\0'; //It may well be that this is not needed...
+  world[i][j].fval=1.;
+  world[i][j].fval2=0.;
+  world[i][j].valarray[0]=1;
+  world[i][j].valarray[1]=2;
+  world[i][j].valarray[2]=3;
+  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_g_to_a);
+  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_a_to_g);
+  
+  world[i][j].fval5=(double)(global_tag++);
+
+  
+  (*pt_Regulation)(&world[i][j]);
+
+  if (logging_mode==1)  
+  {
+    FILE *fp;
+    fp= fopen( par_abrepl_log, "a" );
+    fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+    fclose(fp);
+  }
+}
+
 void Exit(int exit_number){
   
   fprintf(stderr,"Exit(): exit. The program:\n");
@@ -1528,21 +1746,21 @@ void MetabolicSwitch(TYPE2 **world, int row, int col){
   icell=&world[row][col];
 
 
-  switch(icell->crow){
+  switch(icell->state){
     case 0:
       if(icell->fval > genrand_real1() && icell->val4 > 0){
-        icell->crow = 1;
+        icell->state = 1;
       }
     break;
 
     case 1:
       if(icell->fval2 > genrand_real1() && icell->val3 > 0){
-        icell->crow = 0;
+        icell->state = 0;
       }
     break;
 
     default:
-      icell->crow = 0;
+      icell->state = 0;
   }
 
 }
