@@ -43,6 +43,8 @@ with open(filename,"r") as fin:
         if "n" in line: continue
         
         timenow=int(line[0])
+        if timenow % 20000 !=0: continue
+
         if timenow != time:
             if time>maxtime: break
             
