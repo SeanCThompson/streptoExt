@@ -136,7 +136,7 @@ char par_movie_directory_name[MAXSIZE]="movie_strepto"; //genome alphabet
 char par_fileoutput_name[MAXSIZE] = "data_strepto.txt";
 char par_name[MAXSIZE] = "\0"; //name - it will create a par_fileoutput_name: data_[name].txt and a par_movie_directory_name: movie_[name];
 int par_movie_period = 500; // Sets the png generation period (timesteps between logging the worldstate)
-int par_outputdata_period = 10000; // Set's the data logging period (timesteps between logging the worldstate)
+int par_outputdata_period = 100; // Set's the data logging period (timesteps between logging the worldstate)
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 double init_g_to_a=0.; // initial g to a transition prob. Only used for initialisation from a genome
@@ -1683,11 +1683,11 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact, double breakpoint_init){
 
 void InitialiseTestCase(TYPE2 **world){
   int i,j,k;
+  char genome[25] = "AAAAAAAAAABBBBFFFFFFFFFF";
 
-  char genome[4] = "AAA";
-  
-   
-  //Initialise the field
+  int count=1;
+  // Initialise the grid with a bunch of genomes
+  int antib_counter = 1;
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
     world[i][j].val=0;//only for colour
     world[i][j].val2=0;//strain indication
@@ -1696,34 +1696,37 @@ void InitialiseTestCase(TYPE2 **world){
     for(k=0;k<MAXSIZE;k++) antib[i][j].valarray[k]=0;
     for(k=0;k<MAXSIZE;k++) antib[i][j].concarray[k]=0;
     for(k=0;k<MAXSIZE;k++) world[i][j].seq[k]='\0';
-  }
-  
-  // place sequence in the middle
-  i=nrow/2; j=ncol/2;  
-  world[i][j].val=1;
-  world[i][j].val2=2;
-  //world[i][i].seq[0] =seq;
-  strcpy( world[i][i].seq, genome);
-  //world[i][i].seq[ strlen("A") ]='\0'; //It may well be that this is not needed...
-  world[i][j].fval=1.;
-  world[i][j].fval2=0.;
-  world[i][j].valarray[0]=1;
-  world[i][j].valarray[1]=2;
-  world[i][j].valarray[2]=3;
-  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_g_to_a);
-  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_a_to_g);
-  
-  world[i][j].fval5=(double)(global_tag++);
+    if( genrand_real1()<0.01) // i==nrow/2 && j==nrow/2)
+    {
+      world[i][j].val=1+count%10;
+      world[i][j].val2=1+count;
+      world[i][j].fval=0.;
+      world[i][j].fval2=1.;
+      antib_counter += 17;
+      
+      for(k=0;k<init_genome_size+nr_H_genes_to_stay_alive;k++){
+        // if(k<init_genome_size/2) world[i][j].seq[k]='F';
+        // else world[i][j].seq[k]='A';
+        // world[i][j].seq[0]='B';
+        // world[i][j].seq[3+init_genome_size/2]='B';
+      
+        // world[i][j].seq[k]=AZ[(int)(2*genrand_real2())]; 
+        strcpy( world[i][j].seq, genome);
+        
+        if( world[i][j].seq[k]=='A') {
+          if(antib_with_bitstring) world[i][j].valarray[k]=(int)( /*antib_counter*/ pow(2,antib_bitstring_length) * genrand_real2() ); //gives random antib type
+          else world[i][j].valarray[k]=antib_counter; //same within the same genome
+        }
+        else world[i][j].valarray[k]=-1;
+      }
 
-  
-  (*pt_Regulation)(&world[i][j]);
-
-  if (logging_mode==1)  
-  {
-    FILE *fp;
-    fp= fopen( par_abrepl_log, "a" );
-    fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
-    fclose(fp);
+      (*pt_Regulation)(&world[i][j]);  //sets regulation parameters - tested, works fine :)
+      
+      world[i][j].seq[init_genome_size+nr_H_genes_to_stay_alive]='\0';
+      
+      count++;
+      
+    }
   }
 }
 
