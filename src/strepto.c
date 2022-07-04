@@ -103,6 +103,7 @@ void UpdateABproduction(int row, int col);        // Places new antibiotics in t
 void ChangeSeasonMix(TYPE2 **world);                 // "Sporulates" bacteria, shuffle spore position and restarts the field
 void ChangeSeasonNoMix(TYPE2 **world);                 // "Sporulates" bacteria and restarts the field, NO spore shuffling
 void MetabolicSwitch(TYPE2 **world, int row, int col); // Determines the mode of metabolism that the cell will be in for the timestep.
+void StressSwitch(TYPE2 *icel, int cumhammdist); // Determines the stress state of the cell
 
 //Printing, plotting, painting.
 void ColourPlanes(TYPE2 **world, TYPE2 **G, TYPE2 **A, TYPE2 **R); 
@@ -194,8 +195,10 @@ char par_abrepl_log[MAXSIZE]="ab_mut_log.txt"; //genome alphabet
 int change_season_at_initialisation_from_input = 0; // default is to start with full field from input data, and sporulate, i.e. changeseason
 int logging_mode = 0;
 
-TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,"\0","\0",0,0,0,{0}, {0.} }; // zero the all values in a TYPE2 variable
+TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,0.,0.,"\0","\0",0,0,0,0,{0}, {0.} }; // zero the all values in a TYPE2 variable
 int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
+
+int stressEnabled = 1; // Enable cells to use and enter the stressed state
 
 void Initial(void)
 {
@@ -260,6 +263,7 @@ void Initial(void)
     else if(strcmp(readOut, "-change_season_at_initialisation_from_input") == 0) change_season_at_initialisation_from_input = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-test_case") == 0) initialise_from_test_case = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-movement") == 0) p_movement = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-stress") == 0) p_movement = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -411,27 +415,37 @@ int HammingDistance(int a, int b){
 // end returns the birthrate - a decreasing funct of cumhammdist
 double BirthRate(TYPE2 *icel, TYPE2 *ab)
 {
-  int i, k, h;
-  int hammdist, cumhammdist=0;
+  int i, k, h, s;
+  int hammdist_h, cumhammdist_h=0;
+  int hammdist_s, cumhammdist_s=0;
   float birthrate;
   if(ab->val2){
     for (i=0; i<ab->val2; i++){
       //check for each ab in the field whether individual has some resistance.
-      hammdist=999;
+      hammdist_h=999;
+      hammdist_s=999;
       h=0;
+      s=0;
       for(k=0; icel->seq[k]!='\0'; k++){
         if(icel->seq[k]=='A'){
           if(ab->concarray[i] > 0.5){
             h = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
           }
-          if(hammdist>h) hammdist=h; //check if h is the smallest
+          
+          s = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
+
+          if(hammdist_h>h) hammdist_h=h; //check if h is the smallest
+          if(hammdist_s>s) hammdist_s=s; //check if h is the smallest
         }
       }
-      cumhammdist+=hammdist; // add as cumulative distance that particular distance
+      cumhammdist_h+=hammdist_h; // add as cumulative distance that particular distance
+      cumhammdist_s+=hammdist_s; // add as cumulative distance that particular distance
     }
   }
-  if(!antib_with_bitstring) birthrate = (cumhammdist==0)?1.:0.; 
-  else birthrate = exp(-par_beta_birthrate*cumhammdist*cumhammdist); 
+
+  StressSwitch(icel, cumhammdist_s);
+  if(!antib_with_bitstring) birthrate = (cumhammdist_h==0)?1.:0.; 
+  else birthrate = exp(-par_beta_birthrate*cumhammdist_h*cumhammdist_h); 
   return birthrate;
 }
 
@@ -983,6 +997,8 @@ void Mutate(TYPE2** world, int row, int col)
   //note that mutation rate is currently fixed at 0.01. This should be made into an input param
   icell->fval = icell->fval + ((genrand_real1() * 2) -1.) * 0.01;
   icell->fval2 = icell->fval2 + ((genrand_real1() * 2) -1.) * 0.01;
+  icell->fval6 = icell->fval6 + ((genrand_real1() * 2) -1.) * 0.01;
+  icell->fval7 = icell->fval7 + ((genrand_real1() * 2) -1.) * 0.01;
 
   // Clamp transition probabilities to [0 1]
   if(icell->fval > 1.){
@@ -999,6 +1015,22 @@ void Mutate(TYPE2** world, int row, int col)
 
   if(icell->fval2 < 0.){
     icell->fval2 = 0.;
+  }
+
+  if(icell->fval6 > 1.){
+    icell->fval6 = 1.;
+  }
+
+  if(icell->fval6 < 0.){
+    icell->fval6 = 0.;
+  }
+
+  if(icell->fval7 > 1.){
+    icell->fval7 = 1.;
+  }
+
+  if(icell->fval7 < 0.){
+    icell->fval7 = 0.;
   }
 
 }
@@ -1076,6 +1108,7 @@ void Regulation0(TYPE2 *icel){
   icel->val5=Genome2genenumber(icel->seq,'H');
 
   icel->state = 0; // Initialise the new bacteria in the primary metabolism state
+  icel->stress = 0; // Initialise the new bacteria in the unstressed state
 
   double fg = icel->val3; 
   double ag = icel->val4; 
@@ -1201,6 +1234,8 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
       }
 
       fprintf(fp, " %f %f,",world[i][j].fval, world[i][j].fval2); // print the metabolic switching probabilities
+      fprintf(fp, " %f %f,",world[i][j].fval6, world[i][j].fval7); // print the stressed metabolic switching probabilities
+      fprintf(fp, " %d", world[i][j].stress); // print stress state
     }else{
       fprintf(fp," 0 n 0,"); 
     }
@@ -1264,8 +1299,15 @@ int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R)
     tomovie[i-1][j-1 +0*(ncol)] = world[i][j].val;
     tomovie[i-1][j-1 +1*(ncol)] = antib[i][j].val;
     tomovie[i-1][j-1 +2*(ncol)] = G[i][j].val;
-    tomovie[i-1][j-1 +3*(ncol)] = A[i][j].val;
+    //tomovie[i-1][j-1 +3*(ncol)] = A[i][j].val;
     //tomovie[i-1][j-1 +4*(ncol)] = R[i][j].val;
+    if(world[i][j].val>0){
+      tomovie[i-1][j-1 +3*(ncol)] = world[i][j].stress + 1;
+    }
+    else{
+      tomovie[i-1][j-1 +3*(ncol)] = 0;
+    }
+
     if(world[i][j].val>0){
       tomovie[i-1][j-1 +4*(ncol)] = world[i][j].state + 1;
     }
@@ -1648,6 +1690,9 @@ void InitialiseFromScratch(TYPE2 **world,TYPE2 **bact, double breakpoint_init){
       world[i][j].val2=1+count;
       world[i][j].fval=genrand_real1();
       world[i][j].fval2=genrand_real1();
+      world[i][j].fval6=genrand_real1();
+      world[i][j].fval7=genrand_real1();
+
       antib_counter += 17;
       
       for(k=0;k<init_genome_size+nr_H_genes_to_stay_alive;k++){
@@ -1745,24 +1790,68 @@ void MetabolicSwitch(TYPE2 **world, int row, int col){
   TYPE2 *icell;
   icell=&world[row][col];
 
+  if (stressEnabled == 1)
+  {
+    if (icell->stress == 1)
+    {
+      switch(icell->state){
+        case 0:
+          if(icell->fval6 > genrand_real1() && icell->val4 > 0){
+            icell->state = 1;
+          }
+        break;
 
-  switch(icell->state){
-    case 0:
-      if(icell->fval > genrand_real1() && icell->val4 > 0){
-        icell->state = 1;
+        case 1:
+          if(icell->fval7 > genrand_real1() && icell->val3 > 0){
+            icell->state = 0;
+          }
+        break;
+
+        default:
+          icell->state = 0;
       }
-    break;
+    }
+    else
+    {
+      // Uses the standard switching parameters
+      switch(icell->state){
+        case 0:
+          if(icell->fval > genrand_real1() && icell->val4 > 0){
+            icell->state = 1;
+          }
+        break;
 
-    case 1:
-      if(icell->fval2 > genrand_real1() && icell->val3 > 0){
-        icell->state = 0;
+        case 1:
+          if(icell->fval2 > genrand_real1() && icell->val3 > 0){
+            icell->state = 0;
+          }
+        break;
+
+        default:
+          icell->state = 0;
       }
-    break;
-
-    default:
-      icell->state = 0;
+    }
   }
+  else
+  {
+    // Uses the standard switching parameters only
+    switch(icell->state){
+      case 0:
+        if(icell->fval > genrand_real1() && icell->val4 > 0){
+          icell->state = 1;
+        }
+      break;
 
+      case 1:
+        if(icell->fval2 > genrand_real1() && icell->val3 > 0){
+          icell->state = 0;
+        }
+      break;
+
+      default:
+        icell->state = 0;
+    }
+  }
 }
 
 int GetAntibCount(TYPE2 **antib, int row, int col){
@@ -1785,4 +1874,16 @@ int GetAntibCount(TYPE2 **antib, int row, int col){
     
   }
   return size;
+}
+
+void StressSwitch(TYPE2 *icel, int cumhammdist){
+  double stressProb;
+
+  stressProb = exp(-0.3 * cumhammdist * cumhammdist);
+
+  if (stressProb < genrand_real1())
+  {
+    icel->stress = 1;
+  }
+
 }

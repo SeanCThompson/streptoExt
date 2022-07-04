@@ -212,7 +212,7 @@ if tot_letter_used==4:
     max_all_array = np.max([max_all_array, np.max(l_gnmsize_posH)])
 
 # fig, ax = plt.subplots(ncols=1,nrows=3)
-fig = plt.figure(constrained_layout=True)
+fig = plt.figure(filename, constrained_layout=True)
 spec2 = gridspec.GridSpec(nrows=5, ncols=3*tot_letter_used+1 , figure=fig)
 ax10 = fig.add_subplot(spec2[1:4 , 0:3])
 ax00 = fig.add_subplot(spec2[0   , 0:3], sharex=ax10)
