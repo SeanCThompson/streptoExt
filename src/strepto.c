@@ -118,6 +118,7 @@ void Exit(int exit_number); //just exits, but prints the program and arguments w
 void BreakPoint_Recombination_LeftToRight_SemiHomog(TYPE2 *icel);
 void BreakPointDeletion_RightToLeft(TYPE2 *icel);
 void BreakPointDeletion_LeftToRight(TYPE2* icel);
+void ProbabilisticBreak_LeftToRight(TYPE2* icel); // Adds a probability distribution that is used to sample which point, if any, the genome will break on
 void ScrambleGenomeBtwnSeasons(TYPE2* icel);
 //takes care of regulation, and also set val3 val4 fval3 and fval4, 
 // It is accessed by function pointers in the code - this is going to be fun
@@ -973,6 +974,7 @@ void Mutate(TYPE2** world, int row, int col)
   if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was  <---previous attempt that doesn't work super well
   else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability  <---previous attempts that doesn't work super well
   else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability    <--------  Default, used in all simulations
+  else if(breakpoint_mut_type=='P') ProbabilisticBreak_LeftToRight(icell);  //5'->3' instability    Doesn't use breakpoints, instead it samples the break position from a probability distribution
   else{ 
     fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
     Exit(1);
@@ -1097,6 +1099,21 @@ void BreakPointDeletion_LeftToRight(TYPE2* icel){
       seq[ipos]='\0';
       break;
     }
+  }
+}
+
+void ProbabilisticBreak_LeftToRight(TYPE2* icel){
+  char *seq=icel->seq;  // Get cell's genome
+  int genome_size = strlen(seq);  // Get length of cell's genome
+  double randVal = genrand_real1();  // Sample randomly from the uniform distribution
+  double m = 0.0001;  // Set the ramp function break distribution
+  double Pos = ceil(randVal / m);  // Get position
+  int iPos = (int)Pos; // Cast position to integer
+
+  // Find if generated position is less than the length of the genome. If yes, break at position
+  if(iPos < genome_size)
+  {
+    seq[iPos]='\0';
   }
 }
 
