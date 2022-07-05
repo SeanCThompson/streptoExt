@@ -1885,5 +1885,9 @@ void StressSwitch(TYPE2 *icel, int cumhammdist){
   {
     icel->stress = 1;
   }
+  else
+  {
+    icel->stress = 0;
+  }
 
 }
