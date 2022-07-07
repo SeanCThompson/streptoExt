@@ -199,6 +199,7 @@ TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,0.,0.,"\0","\0",0,0,0,0,{0}, {0.}
 int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 int stressEnabled = 1; // Enable cells to use and enter the stressed state
+int initialTime = 0;
 
 void Initial(void)
 {
@@ -301,9 +302,10 @@ void Initial(void)
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
   DIR *dir = opendir(par_movie_directory_name);
-  if(dir){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); Exit(1);}
+  if(dir && strlen(par_fileinput_name)== 0){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); Exit(1);}
   FILE *fp = fopen(par_fileoutput_name,"r"); 
-  if(fp){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
+  if(fp && strlen(par_fileinput_name)== 0){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
+  if(!fp && strlen(par_fileinput_name)!= 0){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
   //File for input - if any
   if(strlen(par_fileinput_name)){
     FILE *fp = fopen(par_fileinput_name,"r"); 
@@ -1517,6 +1519,10 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
         strcpy(fline_cp,fline); //for errors
         // fprintf(stderr,"The line is: %s",fline); // contains new line
         token = strtok(fline,sep);    // Time
+
+        if(i == 1 && j == 1){
+          initialTime = atoi(token);
+        }
         // fprintf(stderr,"First token %s\n",token);
         // fprintf(stderr,"First token %d\n",atoi(token));
         // exit(1);
@@ -1550,6 +1556,14 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
             int size = strlen(paramVal);
             paramVal[size-2] = '\0';
             world[i][j].fval2 = atof(paramVal);
+
+            token = strtok(NULL, sep);      // regulation param in field at this pos
+            world[i][j].fval6 = atof(token);
+            token = strtok(NULL, sep);      // regulation param in field at this pos
+            paramVal = token;
+            size = strlen(paramVal);
+            paramVal[size-2] = '\0';
+            world[i][j].fval7 = atof(paramVal);
 
             token2 = strtok(fab_string,sepab);
             
