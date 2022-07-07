@@ -200,6 +200,7 @@ TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,0.,0.,"\0","\0",0,0,0,0,{0}, {0.}
 int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 int stressEnabled = 1; // Enable cells to use and enter the stressed state
+int initialTime = 0;
 
 void Initial(void)
 {
@@ -265,6 +266,8 @@ void Initial(void)
     else if(strcmp(readOut, "-test_case") == 0) initialise_from_test_case = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-movement") == 0) p_movement = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-stress") == 0) p_movement = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-Delay_AG") == 0) switchDelayAG = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-Delay_GA") == 0) switchDelayGA = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -302,9 +305,10 @@ void Initial(void)
   //check if par_movie_directory_name and par_fileoutput_name already exist,
   // simulation not starting if that is the case
   DIR *dir = opendir(par_movie_directory_name);
-  if(dir){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); Exit(1);}
+  if(dir && strlen(par_fileinput_name)== 0){ fprintf(stderr, "Initial(): Error. Directory %s already exists, simulation not starting\n",par_movie_directory_name); Exit(1);}
   FILE *fp = fopen(par_fileoutput_name,"r"); 
-  if(fp){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
+  if(fp && strlen(par_fileinput_name)== 0){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
+  if(!fp && strlen(par_fileinput_name)!= 0){ fprintf(stderr, "Initial(): Error. File %s already exists, simulation not starting\n",par_fileoutput_name); Exit(1);}
   //File for input - if any
   if(strlen(par_fileinput_name)){
     FILE *fp = fopen(par_fileinput_name,"r"); 
@@ -476,7 +480,7 @@ void NextState(int row,int col)
                         
         double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]); //calculates replication probability
         //if cell has no fitness genes in genome it cannot reproduce
-        if(nei->val3==0 || repprob<=0.000000000001 || nei->state == 1) continue;
+        if(nei->val3==0 || repprob<=0.000000000001 || nei->state > (int)switchDelayAG) continue;
         //save direction
         dirarray[counter]=k;
 
@@ -1124,7 +1128,7 @@ void Regulation0(TYPE2 *icel){
   icel->val4=Genome2genenumber(icel->seq,'A');
   icel->val5=Genome2genenumber(icel->seq,'H');
 
-  icel->state = 0; // Initialise the new bacteria in the primary metabolism state
+  icel->state = -1; // Initialise the new bacteria in the primary metabolism state
   icel->stress = 0; // Initialise the new bacteria in the unstressed state
 
   double fg = icel->val3; 
@@ -1145,7 +1149,7 @@ void UpdateABproduction(int row, int col){
 
   int i,k;
   float abDeposit = 0.05; 
-  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->state == 0) return;//if you don't have antib genes, surely no ab are placed
+  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->state < (int)switchDelayGA) return;//if you don't have antib genes, surely no ab are placed
 
   int howmany_pos_get_ab = 100 * bnldev(icell->fval4,len_ab_poslist);
   //fprintf(stderr, "%d %f %d\n", howmany_pos_get_ab, icell->fval4 * len_ab_poslist, len_ab_poslist);
@@ -1253,6 +1257,7 @@ int PrintPopFull(TYPE2 **world,TYPE2 **antib){
       fprintf(fp, " %f %f,",world[i][j].fval, world[i][j].fval2); // print the metabolic switching probabilities
       fprintf(fp, " %f %f,",world[i][j].fval6, world[i][j].fval7); // print the stressed metabolic switching probabilities
       fprintf(fp, " %d", world[i][j].stress); // print stress state
+      fprintf(fp, " %d", world[i][j].state); // print metabolbic state
     }else{
       fprintf(fp," 0 n 0,"); 
     }
@@ -1326,7 +1331,12 @@ int ToMovie(TYPE2 **world, TYPE2 **antib, TYPE2** G, TYPE2** A, TYPE2** R)
     }
 
     if(world[i][j].val>0){
-      tomovie[i-1][j-1 +4*(ncol)] = world[i][j].state + 1;
+      if(world[i][j].state < 0){
+        tomovie[i-1][j-1 +4*(ncol)] = 1;
+      }else if (world[i][j].state > 0)
+      {
+        tomovie[i-1][j-1 +4*(ncol)] = 2;
+      }
     }
     else{
       tomovie[i-1][j-1 +4*(ncol)] = 0;
@@ -1534,6 +1544,10 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
         strcpy(fline_cp,fline); //for errors
         // fprintf(stderr,"The line is: %s",fline); // contains new line
         token = strtok(fline,sep);    // Time
+
+        if(i == 1 && j == 1){
+          initialTime = atoi(token);
+        }
         // fprintf(stderr,"First token %s\n",token);
         // fprintf(stderr,"First token %d\n",atoi(token));
         // exit(1);
@@ -1567,6 +1581,14 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
             int size = strlen(paramVal);
             paramVal[size-2] = '\0';
             world[i][j].fval2 = atof(paramVal);
+
+            token = strtok(NULL, sep);      // regulation param in field at this pos
+            world[i][j].fval6 = atof(token);
+            token = strtok(NULL, sep);      // regulation param in field at this pos
+            paramVal = token;
+            size = strlen(paramVal);
+            paramVal[size-2] = '\0';
+            world[i][j].fval7 = atof(paramVal);
 
             token2 = strtok(fab_string,sepab);
             
@@ -1807,68 +1829,74 @@ void MetabolicSwitch(TYPE2 **world, int row, int col){
   TYPE2 *icell;
   icell=&world[row][col];
 
+  int stateSign = 0;
+  double kga, kag;
+
+  kag = icell->fval2; 
+  kga = icell->fval;
+
+  if (icell->state > 0)
+  {
+    stateSign = 1;
+  }else if (icell->state < 0)
+  {
+    stateSign = 0;
+  }
+
   if (stressEnabled == 1)
   {
     if (icell->stress == 1)
     {
-      switch(icell->state){
-        case 0:
-          if(icell->fval6 > genrand_real1() && icell->val4 > 0){
-            icell->state = 1;
-          }
-        break;
-
-        case 1:
-          if(icell->fval7 > genrand_real1() && icell->val3 > 0){
-            icell->state = 0;
-          }
-        break;
-
-        default:
-          icell->state = 0;
-      }
-    }
-    else
-    {
-      // Uses the standard switching parameters
-      switch(icell->state){
-        case 0:
-          if(icell->fval > genrand_real1() && icell->val4 > 0){
-            icell->state = 1;
-          }
-        break;
-
-        case 1:
-          if(icell->fval2 > genrand_real1() && icell->val3 > 0){
-            icell->state = 0;
-          }
-        break;
-
-        default:
-          icell->state = 0;
-      }
+      kag = icell->fval7; 
+      kga = icell->fval6;
     }
   }
-  else
-  {
-    // Uses the standard switching parameters only
-    switch(icell->state){
-      case 0:
-        if(icell->fval > genrand_real1() && icell->val4 > 0){
-          icell->state = 1;
-        }
-      break;
 
-      case 1:
-        if(icell->fval2 > genrand_real1() && icell->val3 > 0){
-          icell->state = 0;
-        }
-      break;
 
-      default:
-        icell->state = 0;
-    }
+  switch(stateSign){
+    case 0:
+
+      // if(icell->val3 == 0)
+      // {
+      //   icell->state = 1;
+      // }
+      if(kga > genrand_real1() && icell->val4 > 0 && icell->state < -(int)switchDelayGA)
+      {
+        icell->state = 1;
+        break;
+      }
+      
+      icell->state = icell->state - 1;
+
+      // if(icell->state < -(int)switchDelayGA)
+      // {
+      //   icell->state = -1;
+      // }
+    break;
+
+    case 1:
+      
+      // if(icell->val4 == 0)
+      // {
+      //   icell->state = -1;
+      // }
+      if(kag > genrand_real1() && icell->val3 > 0 && icell->state > (int)switchDelayAG){
+        icell->state = -1;
+        break;
+      }
+      
+      icell->state = icell->state + 1;
+      
+      // if(icell->state > (int)switchDelayAG)
+      // {
+      //   icell->state = 1;
+      // }
+    break;
+
+    default:
+      icell->state = -1;
   }
+    
 }
 
 int GetAntibCount(TYPE2 **antib, int row, int col){
