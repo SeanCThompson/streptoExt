@@ -202,6 +202,9 @@ int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 int stressEnabled = 1; // Enable cells to use and enter the stressed state
 int initialTime = 0;
 
+int switchDelayAG = 1;
+int switchDelayGA = 1;
+
 void Initial(void)
 {
 	// readout parameters
@@ -1111,6 +1114,13 @@ void ProbabilisticBreak_LeftToRight(TYPE2* icel){
   int genome_size = strlen(seq);  // Get length of cell's genome
   double randVal = genrand_real1();  // Sample randomly from the uniform distribution
   double m = 0.0001;  // Set the ramp function break distribution
+
+  if (icel->stress == 1)
+  {
+    m = 0.0003; // Simuate increased mutation rate in the presence of foreign AB
+  }
+  
+
   double Pos = ceil(randVal / m);  // Get position
   int iPos = (int)Pos; // Cast position to integer
 
