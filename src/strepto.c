@@ -200,6 +200,8 @@ int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 int stressEnabled = 1; // Enable cells to use and enter the stressed state
 int initialTime = 0;
+int switchDelayAG = 1;
+int switchDelayGA = 1;
 
 void Initial(void)
 {
