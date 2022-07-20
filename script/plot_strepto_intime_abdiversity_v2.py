@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+from cmath import exp
+from enum import unique
 import matplotlib as mpl
 mpl.use('qt5Agg')
 
@@ -11,6 +13,16 @@ import matplotlib.cm as cm
 from matplotlib.lines import Line2D
 import matplotlib.gridspec as gridspec
 import numpy as np
+
+def getABDiversity(line, genome_pos):
+    genome = line[genome_pos]
+    ABs = line[(genome_pos+1)]
+    ABs = ABs.split(",")
+    len_ABs = len(ABs)
+    uniq = len(set(ABs))
+    diversity_Ratio = uniq/len_ABs
+
+    return(diversity_Ratio)
 
 ltime=[]
 lF=[]
@@ -25,15 +37,28 @@ lstd_B=[]
 lstd2_F=[]
 lstd2_A=[]
 lstd2_B=[]
+lDiv=[]
+lav_Div=[]
+lstd_Div=[]
+lstd2_Div=[]
 
 genome_pos_in_file = 4
 
 filename = sys.argv[1]
 maxtime =float("inf") 
-try :
-    maxtime = int(sys.argv[2])
+altMode = 0
+
+try:
+    altMode = int(sys.argv[2])
 except:
     pass
+   
+
+try :
+    maxtime = int(sys.argv[3])
+except:
+    pass
+
 time = int( (Popen(["head","-n1",filename], stdout=PIPE).stdout.read()).split()[0])
 print( "Initial time =",time)
 with open(filename,"r") as fin:
@@ -61,7 +86,12 @@ with open(filename,"r") as fin:
             lstd_B.append(np.quantile(lB,0.25))
             lstd2_B.append(np.quantile(lB,0.75))
 
-            lF=[];lA=[];lB=[]
+            if(altMode):
+                lav_Div.append(np.median(lDiv))
+                lstd_Div.append(np.quantile(lDiv,0.25))
+                lstd2_Div.append(np.quantile(lDiv,0.75))
+
+            lF=[];lA=[];lB=[];lDiv=[]
             
         try:
             genome=line[genome_pos_in_file]
@@ -71,25 +101,55 @@ with open(filename,"r") as fin:
         except:
             pass
 
-plt.plot(ltime,lav_F,label = "median nr. growth-promoting genes +/- 25\%")
-plt.plot(ltime,lav_A,label = "median nr. antibiotic genes +/- 25\%")
-plt.plot(ltime,lav_B,label = "median nt. fragile sites +/- 25\%")
+        if(altMode):
+            try:
+                divRatio = getABDiversity(line, genome_pos_in_file)
+                lDiv.append(divRatio)
+            except:
+                pass
 
-plt.fill_between(ltime, lstd_F,lstd2_F , alpha=0.5)
-plt.fill_between(ltime, lstd_A,lstd2_A,alpha=0.5)
-plt.fill_between(ltime, lstd_B,lstd2_B,alpha=0.5)
 
-plt.xlim(xmin=0)
-plt.xlabel("Time steps")
-plt.ylabel("Nr. genes")
 
-logscale=True
-if logscale:
-    plt.yscale('log')
-    plt.ylim(ymin=0)
+if(altMode!=1):
+    plt.plot(ltime,lav_F,label = "median nr. growth-promoting genes +/- 25\%")
+    plt.plot(ltime,lav_A,label = "median nr. antibiotic genes +/- 25\%")
+    plt.plot(ltime,lav_B,label = "median nt. fragile sites +/- 25\%")
+
+    plt.fill_between(ltime, lstd_F,lstd2_F , alpha=0.5)
+    plt.fill_between(ltime, lstd_A,lstd2_A,alpha=0.5)
+    plt.fill_between(ltime, lstd_B,lstd2_B,alpha=0.5)
+
+    plt.xlim(xmin=0)
+    plt.xlabel("Time steps")
+    plt.ylabel("Nr. genes")
+
+    logscale=True
+    if logscale:
+        plt.yscale('log')
+        plt.ylim(ymin=0)
+    else:
+        plt.ylim(ymin=0)
+        
+    plt.legend()
+    plt.title(filename)
+    plt.show()
 else:
-    plt.ylim(ymin=0)
-    
-plt.legend()
-plt.title(filename)
-plt.show()
+    # plt.figure()
+    plt.plot(ltime,lav_Div,label = "median nr. growth-promoting genes +/- 25\%")
+
+    plt.fill_between(ltime, lstd_Div, lstd2_Div, alpha=0.5)
+
+    plt.xlim(xmin=0)
+    plt.xlabel("Time steps")
+    plt.ylabel("Diversity ratio")
+
+    logscale=False
+    if logscale:
+        plt.yscale('log')
+        plt.ylim(ymin=0)
+    else:
+        plt.ylim(ymin=0)
+        
+    plt.legend()
+    plt.title(filename)
+    plt.show()
