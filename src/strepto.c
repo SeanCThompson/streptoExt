@@ -479,7 +479,7 @@ void NextState(int row,int col)
                         
         double repprob= ( nei->val5 < nr_H_genes_to_stay_alive )? 0.: BirthRate(nei, &antib[row][col]); //calculates replication probability
         //if cell has no fitness genes in genome it cannot reproduce
-        if(nei->val3==0 || repprob<=0.000000000001 || nei->state > (int)switchDelayAG) continue;
+        if(nei->val3==0 || repprob<=0.000000000001 || nei->state > -(int)switchDelayGA) continue;
         //save direction
         dirarray[counter]=k;
 
@@ -1132,7 +1132,7 @@ void UpdateABproduction(int row, int col){
 
   int i,k;
   float abDeposit = 0.05; 
-  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->state < (int)switchDelayGA) return;//if you don't have antib genes, surely no ab are placed
+  if( icell->val4==0 || icell->fval4<0.000000000001 || icell->state < (int)switchDelayAG) return;//if you don't have antib genes, surely no ab are placed
 
   int howmany_pos_get_ab = 100 * bnldev(icell->fval4,len_ab_poslist);
   //fprintf(stderr, "%d %f %d\n", howmany_pos_get_ab, icell->fval4 * len_ab_poslist, len_ab_poslist);
@@ -1839,10 +1839,11 @@ void MetabolicSwitch(TYPE2 **world, int row, int col){
   switch(stateSign){
     case 0:
 
-      // if(icell->val3 == 0)
-      // {
-      //   icell->state = 1;
-      // }
+      if(icell->val3 == 0)
+      {
+        icell->state = 1;
+        break;
+      }
       if(kga > genrand_real1() && icell->val4 > 0 && icell->state < -(int)switchDelayGA)
       {
         icell->state = 1;
@@ -1859,10 +1860,11 @@ void MetabolicSwitch(TYPE2 **world, int row, int col){
 
     case 1:
       
-      // if(icell->val4 == 0)
-      // {
-      //   icell->state = -1;
-      // }
+      if(icell->val4 == 0)
+      {
+        icell->state = -1;
+        break;
+      }
       if(kag > genrand_real1() && icell->val3 > 0 && icell->state > (int)switchDelayAG){
         icell->state = -1;
         break;
