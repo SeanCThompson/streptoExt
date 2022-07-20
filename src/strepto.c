@@ -205,6 +205,9 @@ int initialTime = 0;
 int switchDelayAG = 1;
 int switchDelayGA = 1;
 
+double unstressedBreakGradient = 0.0001;
+double stressedBreakGradient = 0.0003;
+
 void Initial(void)
 {
 	// readout parameters
@@ -271,6 +274,8 @@ void Initial(void)
     else if(strcmp(readOut, "-stress") == 0) p_movement = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-Delay_AG") == 0) switchDelayAG = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-Delay_GA") == 0) switchDelayGA = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-nominal_break") == 0) unstressedBreakGradient = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-stressed_break") == 0) stressedBreakGradient = atof(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -1113,11 +1118,11 @@ void ProbabilisticBreak_LeftToRight(TYPE2* icel){
   char *seq=icel->seq;  // Get cell's genome
   int genome_size = strlen(seq);  // Get length of cell's genome
   double randVal = genrand_real1();  // Sample randomly from the uniform distribution
-  double m = 0.0001;  // Set the ramp function break distribution
+  double m = unstressedBreakGradient;  // Set the ramp function break distribution
 
   if (icel->stress == 1)
   {
-    m = 0.0003; // Simuate increased mutation rate in the presence of foreign AB
+    m = stressedBreakGradient; // Simuate increased mutation rate in the presence of foreign AB
   }
   
 
