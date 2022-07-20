@@ -205,9 +205,6 @@ int switchDelayAG = 1;
 int switchDelayGA = 1;
 int stressRelease = 0;
 
-int switchDelayAG = 1;
-int switchDelayGA = 1;
-
 double unstressedBreakGradient = 0.0001;
 double stressedBreakGradient = 0.0003;
 
