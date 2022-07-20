@@ -200,6 +200,9 @@ int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 int stressEnabled = 1; // Enable cells to use and enter the stressed state
 int initialTime = 0;
+int switchDelayAG = 1;
+int switchDelayGA = 1;
+int stressRelease = 0;
 
 void Initial(void)
 {
@@ -267,6 +270,7 @@ void Initial(void)
     else if(strcmp(readOut, "-stress") == 0) p_movement = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-Delay_AG") == 0) switchDelayAG = atoi(argv_g[i+1]);
     else if(strcmp(readOut, "-Delay_GA") == 0) switchDelayGA = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-stress_release") == 0) stressRelease = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -1914,6 +1918,13 @@ void StressSwitch(TYPE2 *icel, int cumhammdist){
   if (stressProb < genrand_real1())
   {
     icel->stress = 1;
+  }
+  else
+  {
+    if (stressRelease == 1)
+    {
+      icel->stress = 0;
+    }    
   }
 
 }
