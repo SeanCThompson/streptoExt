@@ -196,17 +196,17 @@ char par_abrepl_log[MAXSIZE]="ab_mut_log.txt"; //genome alphabet
 int change_season_at_initialisation_from_input = 0; // default is to start with full field from input data, and sporulate, i.e. changeseason
 int logging_mode = 0;
 
-TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,0.,0.,"\0","\0",0,0,0,0,{0}, {0.} }; // zero the all values in a TYPE2 variable
+TYPE2 TYPE2_empty = { 0,0,0,0,0,0.,0.,0.,0.,0.,0.,0.,"\0","\0",0,0,0,0,{0}, {0}, {0.} }; // zero the all values in a TYPE2 variable
 int global_tag=0; //converted to fval5 - float because I'm out of int in TYPE2
 
 int stressEnabled = 1; // Enable cells to use and enter the stressed state
-int initialTime = 0;
-int switchDelayAG = 1;
-int switchDelayGA = 1;
-int stressRelease = 0;
+int initialTime = 0; // The simulation start time. This is used when recovering/restarting a simulation fromt he last frame of a data file
+int switchDelayAG = 0; // The delay time to switch from AB production to Growth
+int switchDelayGA = 0; // The delay time to switch from Growth to AB production 
+int stressRelease = 0; // Enable the cells to leave the stress state (default is they cannot leave)
 
-double unstressedBreakGradient = 0.0001;
-double stressedBreakGradient = 0.0003;
+double unstressedBreakGradient = 0.0001; // Default unstressed break gradient. Only used in the probabilistic breaking mode
+double stressedBreakGradient = 0.0003; // Default stressed break gradient. Only used in the probabilistic breaking mode
 
 void Initial(void)
 {
@@ -449,9 +449,23 @@ double BirthRate(TYPE2 *icel, TYPE2 *ab)
           s = HammingDistance( icel->valarray[k] , ab->valarray[i] );  //finds HD
 
           if(hammdist_h>h) hammdist_h=h; //check if h is the smallest
-          if(hammdist_s>s) hammdist_s=s; //check if h is the smallest
+          if(hammdist_s>s) hammdist_s=s; //check if s is the smallest
         }
       }
+
+
+      // Part of the inherited resistance feature. Not completed in time so it has been commented out here.
+      // for(k=0; icel->parentarray[k]!='\0'; k++){
+      //   if(ab->concarray[i] > 0.5){
+      //     h = HammingDistance( icel->parentarray[k] , ab->valarray[i] );  //finds HD
+      //   }
+        
+      //   s = HammingDistance( icel->parentarray[k] , ab->valarray[i] );  //finds HD
+
+      //   if(hammdist_h>h) hammdist_h=h; //check if h is the smallest
+      //   if(hammdist_s>s) hammdist_s=s; //check if s is the smallest
+      // }
+
       cumhammdist_h+=hammdist_h; // add as cumulative distance that particular distance
       cumhammdist_s+=hammdist_s; // add as cumulative distance that particular distance
     }
@@ -517,6 +531,8 @@ void NextState(int row,int col)
 
         TYPE2 winner = GetNeighborS(world,row,col,direction);
         world[row][col] = winner;
+        //memcpy(world[row][col].parentarray, winner.valarray, sizeof(winner.valarray)); // Part of the unfinished inherited resistance feature. Wasn't completed in time so it has been 
+        //winner.parentarray[0]='\0';
         
         Mutate(world,row,col);
         
