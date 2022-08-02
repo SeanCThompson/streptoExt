@@ -41,6 +41,7 @@ with open(filename,"r") as fin:
         line_number+=1
         line = line.split()
         time = int(line[0])
+        if line[-1]==2: continue
         if time >= maxtime : break
         
         # E = extinction
@@ -63,7 +64,7 @@ with open(filename,"r") as fin:
                     # sys.exit(1)
                     pass
             else:
-                if len(line)>3:
+                if len(line)>4:
                     print("Error, this is not an initial guy.")
                     print(line)
                     sys.exit(1)
