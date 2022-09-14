@@ -1734,8 +1734,8 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, doub
   // place sequence in the middle
   i=nrow/2; j=(int)(ncol * 3/4);
   fprintf(stderr, "\nj=%d\n", j);
-  world[i][j].val=1;
-  world[i][j].val2=2;
+  world[i][j].val=50;
+  world[i][j].val2=50;
   strcpy( world[i][j].seq, init_genome);
   world[i][j].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
   world[i][j].fval=init_g_to_a;

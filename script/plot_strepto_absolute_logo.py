@@ -198,9 +198,9 @@ ax21 = fig.add_subplot(spec2[1   , 3:6])
 # ax_cbarA = fig.add_subplot(spec2[5:8, -1])
 
 if tot_letter_used==3:
-    ax12 = fig.add_subplot(spec2[1:4 , 6:9], sharey = ax10)
+    ax12 = fig.add_subplot(spec2[2:5 , 6:9], sharey = ax10)
     ax02 = fig.add_subplot(spec2[0   , 6:9], sharex = ax12, sharey = ax00)
-    ax22 = fig.add_subplot(spec2[4   , 6:9])
+    ax22 = fig.add_subplot(spec2[1   , 6:9])
     # ax_cbarB = fig.add_subplot(spec2[9:, -1])
 
 if tot_letter_used==4:
@@ -218,60 +218,97 @@ my_cmapF = sns.color_palette("gist_earth_r", as_cmap=True)
 
 X, Y = np.meshgrid( range(maxlen+1) , range(0,bin_gnm))
 F_2dplot = ax10.pcolormesh(Y,X, l_gnmsize_posF, cmap = my_cmapF, vmin=min_all_array, vmax=max_all_array )
+ax10.set_xlabel("Position in genome", fontsize=7)
+ax10.set_ylabel("Length of Genome", fontsize=7)
 fig.colorbar(F_2dplot, ax=ax10, orientation='horizontal')
 
 l_gnmsize_posF_sumgnmsize = [ sum(x) for x in  l_gnmsize_posF ]
 l_gnmsize_posA_sumgnmsize = [ sum(x) for x in  l_gnmsize_posA ]
 l_gnsize_pos = [sum(x) for x in zip(l_gnmsize_posF_sumgnmsize, l_gnmsize_posA_sumgnmsize)]
+
 from operator import truediv
+
+if tot_letter_used==3:
+    l_gnmsize_posB_sumgnmsize = [ sum(x) for x in  l_gnmsize_posB ]
+    l_gnsize_pos = [sum(x) for x in zip(l_gnmsize_posF_sumgnmsize, l_gnmsize_posA_sumgnmsize, l_gnmsize_posB_sumgnmsize)]
+    l_ratio_posB = list( map(truediv, l_gnmsize_posB_sumgnmsize, l_gnsize_pos) )
+
 
 l_ratio_posF = list( map(truediv, l_gnmsize_posF_sumgnmsize, l_gnsize_pos) )
 l_ratio_posA = list( map(truediv, l_gnmsize_posA_sumgnmsize, l_gnsize_pos) )
 
 #ax00.plot(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posF_sumgnmsize)) for x in l_gnmsize_posF_sumgnmsize], c='dodgerblue', label = 'Distribution of\ngrowth genes', lw=4)
-ax00.plot(np.linspace(0,bin_gnm,bin_gnm), l_ratio_posF, c='dodgerblue', label = 'Ratio of growth genes to \ntotal genes in position', lw=4)
+ax00.plot(np.linspace(0,bin_gnm,bin_gnm), [x*100 for x in l_ratio_posF], c='dodgerblue', label = 'Ratio of growth genes to \ntotal genes in position', lw=4)
 #ax00.fill_between(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posF_sumgnmsize)) for x in l_gnmsize_posF_sumgnmsize], color='aliceblue')
-ax00.fill_between(np.linspace(0,bin_gnm,bin_gnm), l_ratio_posF, color='aliceblue')
+ax00.fill_between(np.linspace(0,bin_gnm,bin_gnm), [x*100 for x in l_ratio_posF], color='lightblue')
 ax00.legend()
+ax00.set_title('Growth genes')
 ax00.margins(0,0)   
+ax00.set_xlabel("Position in genome", fontsize=7)
+ax00.set_ylabel("% Growth genes in postion", fontsize=7)
 ax10.margins(0,0) 
 
+
 ax20.plot(np.linspace(0,bin_gnm,bin_gnm), l_gnmsize_posF_sumgnmsize, c='dodgerblue', label = 'Total count of growth \ngenes in position', lw=4)
-ax20.fill_between(np.linspace(0,bin_gnm,bin_gnm), l_gnmsize_posF_sumgnmsize, color='aliceblue')
+ax20.fill_between(np.linspace(0,bin_gnm,bin_gnm), l_gnmsize_posF_sumgnmsize, color='lightblue')
 ax20.legend()
 ax20.margins(0,0) 
+ax20.set_xlabel("Position in genome", fontsize=7)
+ax20.set_ylabel("Growth genes in postion", fontsize=7)
 
 # A genes
 my_cmapA = sns.color_palette("gist_earth_r", as_cmap=True)
 A_2dplot = ax11.pcolormesh(Y,X, l_gnmsize_posA, cmap = my_cmapA, vmin=min_all_array, vmax=max_all_array)
+ax11.set_xlabel("Position in genome", fontsize=7)
+ax11.set_ylabel("Length of Genome", fontsize=7)
 fig.colorbar(A_2dplot, ax=ax11, orientation='horizontal')
 
 #l_gnmsize_posA_sumgnmsize = [ sum(x) for x in  l_gnmsize_posA ]
 #ax01.plot(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posA_sumgnmsize)) for x in l_gnmsize_posA_sumgnmsize], c='darkorange', label = 'Distribution of\nantibiot. genes', lw=4)
-ax01.plot(np.linspace(1,bin_gnm,bin_gnm), l_ratio_posA, c='darkorange', label = 'Ratio of antibiot. genes to \ntotal genes in position', lw=4)
+ax01.plot(np.linspace(1,bin_gnm,bin_gnm), [x*100 for x in l_ratio_posA], c='darkorange', label = 'Ratio of antibiot. genes to \ntotal genes in position', lw=4)
 #ax01.fill_between(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posA_sumgnmsize)) for x in l_gnmsize_posA_sumgnmsize], color='moccasin')
-ax01.fill_between(np.linspace(1,bin_gnm,bin_gnm), l_ratio_posA, color='moccasin')
+ax01.fill_between(np.linspace(1,bin_gnm,bin_gnm), [x*100 for x in l_ratio_posA], color='moccasin')
 ax01.legend()
+ax01.set_title('Antibiotic genes')
 ax11.margins(0,0)
 ax01.margins(0,0)
+ax01.set_xlabel("Position in genome", fontsize=7)
+ax01.set_ylabel("% AB genes in postion", fontsize=7)
 
 ax21.plot(np.linspace(1,bin_gnm,bin_gnm), l_gnmsize_posA_sumgnmsize, c='darkorange', label = 'Total count of antibiot. \ngenes in position', lw=4)
 ax21.fill_between(np.linspace(1,bin_gnm,bin_gnm), l_gnmsize_posA_sumgnmsize, color='moccasin')
 ax21.legend()
 ax21.margins(0,0)
+ax21.set_xlabel("Position in genome", fontsize=7)
+ax21.set_ylabel("AB genes in postion", fontsize=7)
 
 # B genes
 if tot_letter_used==3:
-    my_cmapB = sns.color_palette("gist_earth_r", as_cmap=True)
-    B_2dplot = ax12.pcolormesh(Y,X, l_gnmsize_posB, cmap = my_cmapB, vmin=min_all_array, vmax=max_all_array)
-    fig.colorbar(B_2dplot, ax=ax22, orientation='horizontal')
 
-    l_gnmsize_posB_sumgnmsize = [ sum(x) for x in  l_gnmsize_posB ]
-    ax02.plot(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posB_sumgnmsize)) for x in l_gnmsize_posB_sumgnmsize],c='seagreen', label = 'Distribution of\nfragile sites', lw=4)
-    ax02.fill_between(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posB_sumgnmsize)) for x in l_gnmsize_posB_sumgnmsize], color='honeydew')
+    my_cmapB = sns.color_palette("gist_earth_r", as_cmap=True)
+    B_2dplot = ax12.pcolormesh(Y,X, l_gnmsize_posB, cmap = my_cmapA, vmin=min_all_array, vmax=max_all_array)
+    ax12.set_xlabel("Position in genome", fontsize=7)
+    ax12.set_ylabel("Length of Genome", fontsize=7)
+    fig.colorbar(B_2dplot, ax=ax12, orientation='horizontal')
+
+    #l_gnmsize_posA_sumgnmsize = [ sum(x) for x in  l_gnmsize_posA ]
+    #ax01.plot(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posA_sumgnmsize)) for x in l_gnmsize_posA_sumgnmsize], c='darkorange', label = 'Distribution of\nantibiot. genes', lw=4)
+    ax02.plot(np.linspace(1,bin_gnm,bin_gnm), [x*100 for x in l_ratio_posB], c='seagreen', label = 'Ratio of fragile loci to \ntotal genes in position', lw=4)
+    #ax01.fill_between(np.linspace(0,1,bin_gnm), [x/float(sum(l_gnmsize_posA_sumgnmsize)) for x in l_gnmsize_posA_sumgnmsize], color='moccasin')
+    ax02.fill_between(np.linspace(1,bin_gnm,bin_gnm), [x*100 for x in l_ratio_posB], color='honeydew')
     ax02.legend()
-    ax02.margins(0,0)
+    ax02.set_title('Fragile Loci')
     ax12.margins(0,0)
+    ax02.margins(0,0)
+    ax02.set_xlabel("Position in genome", fontsize=7)
+    ax02.set_ylabel("% Fragile loci in postion", fontsize=7)
+
+    ax22.plot(np.linspace(1,bin_gnm,bin_gnm), l_gnmsize_posB_sumgnmsize, c='seagreen', label = 'Total count of fragile. \nloci in position', lw=4)
+    ax22.fill_between(np.linspace(1,bin_gnm,bin_gnm), l_gnmsize_posA_sumgnmsize, color='honeydew')
+    ax22.legend()
+    ax22.margins(0,0)
+    ax22.set_xlabel("Position in genome", fontsize=7)
+    ax22.set_ylabel("Fragile loci in postion", fontsize=7)
 
 # H genes
 if tot_letter_used==4: 
@@ -299,6 +336,9 @@ ax1last.plot( hist, bins[:-1], c='darkgrey', lw=4)
 ax1last.fill_betweenx(bins[:-1],hist, color='whitesmoke')
 ax1last.set_ylim([0.,max(bins[:-1])])
 ax1last.margins(0,0)
+ax1last.set_xlabel("Density", fontsize=7)
+ax1last.set_ylabel("Length of Genome", fontsize=7)
+ax1last.set_title("Genome lengths")
 # ax13.legend()
 plt.show()
 
