@@ -93,7 +93,7 @@ struct point *ab_poslist; //2D array used to efficiently randomize antibiotics p
 int len_ab_poslist; //size of ab_poslist
 void InitialiseABPosList(struct point **p_ab_poslist, int *p_len_ab_poslist, int MAXRADIUS); //initializes ab_poslist
 void InitialiseFromInput(const char* par_fileinput_name,TYPE2 **world,TYPE2 **antib);
-void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, TYPE2 **world,TYPE2 **antib);
+void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, double stress_g_to_a, double stress_a_to_g, TYPE2 **world,TYPE2 **antib);
 void InitialiseFromScratch(TYPE2 **world,TYPE2 **antib,double breakpoint_init);
 void InitialiseTestCase(TYPE2 **world);
 
@@ -123,6 +123,7 @@ void ScrambleGenomeBtwnSeasons(TYPE2* icel);
 //takes care of regulation, and also set val3 val4 fval3 and fval4, 
 // It is accessed by function pointers in the code - this is going to be fun
 void Regulation0(TYPE2 *icel); //Old version of regulation - this works well
+void RegulationBreak(TYPE2 *icel);
 
 int GetAntibCount(TYPE2 **antib, int row, int col); // Counts antibiotics at point in plane
 
@@ -142,7 +143,11 @@ int par_outputdata_period = 10000; // Set's the data logging period (timesteps b
 char init_genome[MAXSIZE]="\0"; // initial genome, for specific experiments
 char init_ab_gen[MAXSIZE]="\0"; // initial antibiotic bitstring,
 double init_g_to_a=0.; // initial g to a transition prob. Only used for initialisation from a genome
-double init_a_to_g=0; // initial g to a transition prob. Only used for initialisation from a genome
+double init_a_to_g=0.; // initial g to a transition prob. Only used for initialisation from a genome
+double stress_g_to_a=0.; // stressed state g to a transition prob. Only used for initialising from a genome
+double stress_a_to_g=0.; // stressed state a to g transition prob. Only used for initialising from a genome
+double trans_prob_mut_rate = 0.01; // transition prob mutation rate
+
 int initialise_from_singlegenome=0;
 char par_fileinput_name[MAXSIZE] = "\0"; //reads a one timestep snip of data_strepto.txt file
 int initialise_from_input=0;
@@ -207,6 +212,7 @@ int stressRelease = 0; // Enable the cells to leave the stress state (default is
 
 double unstressedBreakGradient = 0.0001; // Default unstressed break gradient. Only used in the probabilistic breaking mode
 double stressedBreakGradient = 0.0003; // Default stressed break gradient. Only used in the probabilistic breaking mode
+int breakOnContact = 1;
 
 void Initial(void)
 {
@@ -241,7 +247,9 @@ void Initial(void)
     else if(strcmp(readOut, "-init_genome") == 0) {strcpy( init_genome , argv_g[i+1] ); 
                                                    strcpy( init_ab_gen , argv_g[i+2] ); 
                                                    init_g_to_a=atof( argv_g[i+3] ); 
-                                                   init_a_to_g=atof( argv_g[i+4] ); i++; i++; i++; 
+                                                   init_a_to_g=atof( argv_g[i+4] ); 
+                                                   stress_a_to_g=atof( argv_g[i+5] ); 
+                                                   stress_g_to_a=atof( argv_g[i+6] ); i++; i++; i++; i++; i++; i++; i++;
                                                    init_genome_size=strlen(init_genome);}
     else if(strcmp(readOut, "-max_ab_prod_per_unit_time") == 0) max_ab_prod_per_unit_time = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-beta_antib_tradeoff") == 0) beta_antib_tradeoff = atof(argv_g[i+1]);
@@ -277,6 +285,8 @@ void Initial(void)
     else if(strcmp(readOut, "-nominal_break") == 0) unstressedBreakGradient = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-stressed_break") == 0) stressedBreakGradient = atof(argv_g[i+1]);
     else if(strcmp(readOut, "-stress_release") == 0) stressRelease = atoi(argv_g[i+1]);
+    else if(strcmp(readOut, "-trans_prob_mut") == 0) trans_prob_mut_rate = atof(argv_g[i+1]);
+    else if(strcmp(readOut, "-contact_break") == 0) breakOnContact = atoi(argv_g[i+1]);
     else {fprintf(stderr,"Parameter number %d was not recognized, simulation not starting\n",i);
           fprintf(stderr,"It might help that parameter number %d was %s\n",i-1, argv_g[i-1]);
           Exit(1);}
@@ -392,7 +402,7 @@ void InitialPlane(void){
   
   // Initialisation of the grid with a bunch of cells - or one, depending on the flags set in Initial()
   if(initialise_from_input) InitialiseFromInput(par_fileinput_name,world,antib);
-  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, init_g_to_a, init_a_to_g, world, antib);
+  else if(initialise_from_singlegenome) InitialiseFromSingleGenome(init_genome, init_ab_gen, init_g_to_a, init_a_to_g, stress_g_to_a, stress_a_to_g, world, antib);
   else if(initialise_from_test_case) InitialiseTestCase(world);
   else InitialiseFromScratch(world,antib,breakpoint_init);
   
@@ -543,7 +553,7 @@ void NextState(int row,int col)
       {
         FILE *fp;
         fp= fopen( par_abrepl_log, "a" );
-        fprintf(fp,"%d R: %d %s %d %s\n", Time, (int)(0.5+winner.fval5), winner.seq, (int)(0.5+world[row][col].fval5), world[row][col].seq);
+        fprintf(fp,"%d R: %d %s %d %s %d %d\n", Time, (int)(0.5+winner.fval5), winner.seq, (int)(0.5+world[row][col].fval5), world[row][col].seq, winner.stress, winner.val2);
         fclose(fp);
       }
       
@@ -566,7 +576,7 @@ void NextState(int row,int col)
       {
         FILE *fp;
         fp= fopen( par_abrepl_log, "a" );
-        fprintf(fp,"%d D: %d %s\n", Time, (int)(0.5+world[row][col].fval5), world[row][col].seq);
+        fprintf(fp,"%d D: %d %s %d %d\n", Time, (int)(0.5+world[row][col].fval5), world[row][col].seq, world[row][col].stress, world[row][col].val2);
         fclose(fp);
       }
 
@@ -698,13 +708,13 @@ void Update(void){
     for(i=nrow/2 - boxsize/2, j=ncol/2 + boxsize/2; i<nrow/2 + boxsize/2; i++){
       if(world[i][j].val2>0) signal=1;
     }
-    if(signal && logging_mode==1){
-      FILE *fp;
-      fp= fopen( par_abrepl_log, "a" );
-      fprintf(fp,"%d E: bye\n", Time);
-      fclose(fp);
-      Exit(0);
-    }
+    // if(signal && logging_mode==1){
+    //   FILE *fp;
+    //   fp= fopen( par_abrepl_log, "a" );
+    //   fprintf(fp,"%d E: bye\n", Time);
+    //   fclose(fp);
+    //   Exit(0);
+    // }
   }
 
   if(Time%par_season_duration==0 && Time>0){
@@ -857,8 +867,9 @@ void ChangeSeasonMix(TYPE2 **world)
       {
         FILE *fp;
         fp= fopen( par_abrepl_log, "a" );
-        fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[ipos][jpos].fval5), world[ipos][jpos].seq);
+        fprintf(fp,"%d I: %d %s %d %d\n", Time, (int)(0.5+world[ipos][jpos].fval5), world[ipos][jpos].seq, world[ipos][jpos].stress, world[ipos][jpos].val2);
         fclose(fp);
+        
       }
       
       
@@ -920,8 +931,9 @@ void ChangeSeasonNoMix(TYPE2 **world)
       {
         FILE *fp;
         fp= fopen( par_abrepl_log, "a" );
-        fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+        fprintf(fp,"%d I: %d %s %d %d\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq, world[i][j].stress, world[i][j].val2);
         fclose(fp);
+
       }
       
       
@@ -1026,10 +1038,10 @@ void Mutate(TYPE2** world, int row, int col)
 
   //Mutate transition probabilities
   //note that mutation rate is currently fixed at 0.01. This should be made into an input param
-  icell->fval = icell->fval + ((genrand_real1() * 2) -1.) * 0.01;
-  icell->fval2 = icell->fval2 + ((genrand_real1() * 2) -1.) * 0.01;
-  icell->fval6 = icell->fval6 + ((genrand_real1() * 2) -1.) * 0.01;
-  icell->fval7 = icell->fval7 + ((genrand_real1() * 2) -1.) * 0.01;
+  icell->fval = icell->fval + ((genrand_real1() * 2) -1.) * trans_prob_mut_rate;
+  icell->fval2 = icell->fval2 + ((genrand_real1() * 2) -1.) * trans_prob_mut_rate;
+  icell->fval6 = icell->fval6 + ((genrand_real1() * 2) -1.) * trans_prob_mut_rate;
+  icell->fval7 = icell->fval7 + ((genrand_real1() * 2) -1.) * trans_prob_mut_rate;
 
   // Clamp transition probabilities to [0 1]
   if(icell->fval > 1.){
@@ -1176,6 +1188,26 @@ void Regulation0(TYPE2 *icel){
   icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act); // Exponential term removed
 } 
 
+//takes care of "regulation", i.e. it sets fval3 and fval4, accessed by function pointers in the code
+void RegulationBreak(TYPE2 *icel){
+  // SET GROWTH AND AB PRODUCTION PARAMETERS
+  icel->val3=Genome2genenumber(icel->seq,'F');
+  icel->val4=Genome2genenumber(icel->seq,'A');
+  icel->val5=Genome2genenumber(icel->seq,'H');
+
+  double fg = icel->val3; 
+  double ag = icel->val4; 
+  
+  icel->fval3 = max_repl_prob_per_unit_time * fg/(fg+h_growth);
+  
+  double constABprod_if_ag;
+  constABprod_if_ag = (ag>0)?constABprod:0.; //check that there are antibiotics - otherwise it might make them out of thin air?
+
+  //fprintf(stderr, "max_ab_prod_per_unit_time = %f, scaling_factor_max_ab_prod_per_unit_time = %f, constABprod_if_ag = %f, ag = %f, h_antib_act = %f\n", max_ab_prod_per_unit_time, scaling_factor_max_ab_prod_per_unit_time, constABprod_if_ag, ag, h_antib_act);
+  
+  icel->fval4 = max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time *constABprod_if_ag + (1.-constABprod_if_ag)*max_ab_prod_per_unit_time * scaling_factor_max_ab_prod_per_unit_time * ag/(ag+h_antib_act); // Exponential term removed
+} 
+
 void UpdateABproduction(int row, int col){
   TYPE2 *icell=&world[row][col];
 
@@ -1188,8 +1220,9 @@ void UpdateABproduction(int row, int col){
   if(howmany_pos_get_ab && logging_mode==1){
     FILE *fp;
     fp= fopen( par_abrepl_log, "a" );
-    fprintf(fp,"%d A: %d %s %d\n",Time,(int)(0.5+ icell->fval5), icell->seq,howmany_pos_get_ab);
+    fprintf(fp,"%d A: %d %s %d %d %d\n",Time,(int)(0.5+ icell->fval5), icell->seq,1, icell->stress, icell->val2);
     fclose(fp);
+
   }
   int which_ab[MAXSIZE];
   int nrtypes=0;
@@ -1672,7 +1705,7 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
       for(i=1;i<=nrow;i++){
         for(j=1;j<=ncol;j++){
           if(world[i][j].val2 != 0)
-            fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+            fprintf(fp,"%d I: %d %s %d\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq, world[i][j].val2);
         }
       }
       fclose(fp);
@@ -1681,10 +1714,11 @@ void InitialiseFromInput(const char* par_fileinput_name, TYPE2 **world,TYPE2 **b
   }
 }
 
-void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, TYPE2 **world,TYPE2 **antib){
-  int i,j,k;
+void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, double init_g_to_a, double init_a_to_g, double stress_g_to_a, double stress_a_to_g, TYPE2 **world,TYPE2 **antib){
+  int i,j, j_prev,k;
   const char sepab[2]=",";
   char *token2;
+  
    
   //Initialise the field
   for(i=1;i<=nrow;i++)for(j=1;j<=ncol;j++) {
@@ -1698,16 +1732,19 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, doub
   }
   
   // place sequence in the middle
-  i=nrow/2; j=ncol/2;  
-  world[i][j].val=1;
-  world[i][j].val2=2;
-  strcpy( world[i][i].seq, init_genome);
-  world[i][i].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+  i=nrow/2; j=(int)(ncol * 3/4);
+  fprintf(stderr, "\nj=%d\n", j);
+  world[i][j].val=50;
+  world[i][j].val2=50;
+  strcpy( world[i][j].seq, init_genome);
+  world[i][j].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
   world[i][j].fval=init_g_to_a;
   world[i][j].fval2=init_a_to_g;
-  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_g_to_a);
-  //fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_a_to_g);
-  
+  world[i][j].fval6=stress_g_to_a;
+  world[i][j].fval7=stress_a_to_g;
+  fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_g_to_a);
+  fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_a_to_g);
+  fprintf(stderr, "\n%s\n", world[i][j].seq);
   world[i][j].fval5=(double)(global_tag++);
 
   if(Genome2genenumber(world[i][j].seq, 'A') ){
@@ -1728,14 +1765,55 @@ void InitialiseFromSingleGenome(const char* init_genome, char* init_ab_gen, doub
       
     }
   }
-
+  j_prev = j;
   (*pt_Regulation)(&world[i][j]);
 
   if (logging_mode==1)  
   {
     FILE *fp;
     fp= fopen( par_abrepl_log, "a" );
-    fprintf(fp,"%d I: %d %s\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq);
+    fprintf(fp,"%d I: %d %s %d\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq, world[i][j].val2);
+    fclose(fp);
+  }
+
+  // place sequence in the middle
+  i=nrow/2; j=(int)(ncol * 1/4); 
+  fprintf(stderr, "\nj=%d\n", j);
+  world[i][j].val=1;
+  world[i][j].val2=1;
+  strcpy( world[i][j].seq, init_genome);
+  world[i][j].seq[ strlen(init_genome) ]='\0'; //It may well be that this is not needed...
+  world[i][j].fval=init_g_to_a;
+  world[i][j].fval2=init_a_to_g;
+  world[i][j].fval6=stress_g_to_a;
+  world[i][j].fval7=stress_a_to_g;
+  fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_g_to_a);
+  fprintf(stderr, "\nI'm here in the initialisation func\n %f", init_a_to_g);
+  fprintf(stderr, "\n%s\n", world[i][j].seq);
+  world[i][j].fval5=(double)(global_tag++);
+
+  if(Genome2genenumber(world[i][j].seq, 'A') ){
+    
+    for(k=0;k<MAXSIZE;k++){
+      if( world[i][j].seq[k]=='\0' )break;
+      if( world[i][j].seq[k]!='A' ) world[i][j].valarray[k]=-1;
+      if( world[i][j].seq[k]=='A' ){
+        // if(first_time)
+        world[i][j].valarray[k] = world[i][j_prev].valarray[k]  + 16; //finally sets AB
+
+
+      }
+      
+    }
+  }
+  
+  (*pt_Regulation)(&world[i][j]);
+
+  if (logging_mode==1)  
+  {
+    FILE *fp;
+    fp= fopen( par_abrepl_log, "a" );
+    fprintf(fp,"%d I: %d %s %d\n", Time, (int)(0.5+world[i][j].fval5), world[i][j].seq, world[i][j].val2);
     fclose(fp);
   }
 
@@ -1955,21 +2033,37 @@ int GetAntibCount(TYPE2 **antib, int row, int col){
   return size;
 }
 
-void StressSwitch(TYPE2 *icel, int cumhammdist){
+void StressSwitch(TYPE2 *icell, int cumhammdist){
   double stressProb;
+  int prevStress;
+
+  prevStress=icell->stress;
 
   stressProb = exp(-0.3 * cumhammdist * cumhammdist);
 
   if (stressProb < genrand_real1())
   {
-    icel->stress = 1;
+    icell->stress = 1;
+    if (prevStress == 0 && breakOnContact == 1)
+    {
+      if(breakpoint_mut_type=='S') BreakPoint_Recombination_LeftToRight_SemiHomog(icell); //how it was  <---previous attempt that doesn't work super well
+      else if(breakpoint_mut_type=='T') BreakPointDeletion_RightToLeft(icell); //no recomb, only 3'->5' instability  <---previous attempts that doesn't work super well
+      else if(breakpoint_mut_type=='C') BreakPointDeletion_LeftToRight(icell);  //5'->3' instability    <--------  Default, used in all simulations
+      else if(breakpoint_mut_type=='P') ProbabilisticBreak_LeftToRight(icell);  //5'->3' instability    Doesn't use breakpoints, instead it samples the break position from a probability distribution
+      else{ 
+        fprintf(stderr,"Mutate(): Error. Unrecognised option for the type of breakpoint mutation\n");
+        Exit(1);
+      }
+      RegulationBreak(icell);
+    }
   }
   else
   {
     if (stressRelease == 1)
     {
-      icel->stress = 0;
+      icell->stress = 0;
     }    
   }
 
 }
+

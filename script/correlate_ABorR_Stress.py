@@ -28,12 +28,15 @@ def Gene2Number(gene):
     if gene=='B':return 2
 
 dg={}
+dg_nominal={}
+dg_stress={}
 count=0
 broken_repl=0
 filename = sys.argv[1]
 # tot_people_alive_pergnm={}
 line_number=0
-maxtime = 1250 # 1000#2500
+mintime=2000
+maxtime = 2500 # 1000#2500
 
 with open(filename,"r") as fin:
     
@@ -41,7 +44,7 @@ with open(filename,"r") as fin:
         line_number+=1
         line = line.split()
         time = int(line[0])
-        if line[-1]==2: continue
+        if int(line[-1])==1: continue
         if time >= maxtime : break
         
         # E = extinction
@@ -58,16 +61,18 @@ with open(filename,"r") as fin:
             if "I:" in line[1]:
                 try:
                     dg[tag]={"gnm":line[3], "birth":time, "death":maxtime, "A":0, "R":0, "offs_tag":[], "parent":"n"} #set death to 2500, this will be true unless death is recorded in log
+                    dg_nominal[tag]={"gnm":line[3], "birth":time, "death":maxtime, "A":0, "R":0, "offs_tag":[], "parent":"n"} # The initial state doesn't have a stress state that is meaningful
+                    dg_stress[tag]={"gnm":line[3], "birth":time, "death":maxtime, "A":0, "R":0, "offs_tag":[], "parent":"n"} # The initial state doesn't have a stress state that is meaningful
                 except:
                     print("Error, here is line: ", line)
                     print("line_number = ", line_number)
                     # sys.exit(1)
                     pass
             else:
-                if len(line)>4:
+                if len(line)>3:
                     print("Error, this is not an initial guy.")
                     print(line)
-                    sys.exit(1)
+                    #sys.exit(1)
                 else:
                     continue # it's a guy with zero length genome
         else:
@@ -79,19 +84,43 @@ with open(filename,"r") as fin:
                 if len(line)>5:
                     offspr_tag = line[4]
                     dg[tag]["offs_tag"].append(offspr_tag)
+                    if line[6] == "1":
+                        
+                        dg_stress[tag]["offs_tag"].append(offspr_tag)
+                        if time >= mintime:
+                            dg_stress[tag]["R"]+=1
+                            dg_stress[tag]["gnm"]=line[3]
+                    else:
+                        dg_nominal[tag]["offs_tag"].append(offspr_tag)
+                        if time >= mintime:
+                            dg_nominal[tag]["R"]+=1
                     if offspr_tag in dg:
                         print("Error, this offspring tag is already in dg")
                     else:
                         if len(line)>5:
                             dg[offspr_tag]={"gnm":line[5], "birth":time, "death":maxtime, "A":0, "R":0, "offs_tag":[], "parent":tag} #set death to maxtime, this will be true unless death is recorded in log
+                            dg_stress[offspr_tag]={"gnm":line[5], "birth":time, "death":maxtime, "A":0, "R":0, "offs_tag":[], "parent":tag} #set death to maxtime, this will be true unless death is recorded in log
+                            dg_nominal[offspr_tag]={"gnm":line[5], "birth":time, "death":maxtime, "A":0, "R":0, "offs_tag":[], "parent":tag} #set death to maxtime, this will be true unless death is recorded in log
             # A = antibiotic production
             elif "A:" in line[1]:
                 #it made an antibiotic
                 dg[tag]["A"]+=1
+                if line[5]=="1":
+                    if time >= mintime: 
+                        dg_stress[tag]["A"]+=1
+                        dg_stress[tag]["gnm"]=line[3]
+                else:
+                    if time >= mintime: 
+                        dg_nominal[tag]["A"]+=1
             # D = death
             elif "D:" in line[1]:
                 if tag in dg:
                     dg[tag]["death"]=time
+                    if line[4]=="1":
+                        dg_stress[tag]["death"]=time
+                        dg_stress[tag]["gnm"]=line[3]
+                    else:
+                        dg_nominal[tag]["death"]=time
         
 
 print("Done, reading data. In total so many people lived:", len(dg))
@@ -114,29 +143,14 @@ for key in dg:
     else:
         d_gnm_and_offs[gnm] = [ dg[ot]["gnm"] for ot in dg[key]["offs_tag"] ]
 
+
+
+
 #just mutational relations
 for gnm in d_gnm_and_offs:
     d_gnm_and_offs[gnm]=set(d_gnm_and_offs)
 
 
-#Get succesful ancestors
-l_ancestor = []
-nr_offspring_to_count_as_successful = 200 # when is an ancestor successful? when it makes so many offsprings
-for gnm in d_genomes:
-    # if d_genomes[gnm]["howmany"]>50: print(gnm,": ",d_genomes[gnm])
-    if d_genomes[gnm]["earliest"]==0 and d_genomes[gnm]["howmany_offs"]>nr_offspring_to_count_as_successful:
-        l_ancestor.append(gnm)
-# Now go get these guys from sys.argv[2] = data_bla.txt
-if len(sys.argv)<=2:
-    print("No ancestor genomes are searched")
-else:
-    print("Going to look for founder bacteria")
-    with open(sys.argv[2],"r") as fin2:
-        for line in fin2:
-            line=line.split()
-            if int(line[0]) != 0: break
-            if line[4] in l_ancestor:
-                print( line[4],line[5])
 
 def set_size(w,h, ax=None):
     """ w, h: width, height in inches """
@@ -150,179 +164,11 @@ def set_size(w,h, ax=None):
     ax.figure.set_size_inches(figw, figh)
 
 
-# GENOME PLOTTING OR LOLLYPOP PLOTTING REPRODUCTION vs AB.
-# ALSO ANCESTOR OFFSPRING RELATION deltaF and deltab
-l_repr_ab_for_lollyplot=[]
-ldeltaf_po=[]
-ldeltaab=[]
-tot_deltaab=0
-print_genomes = False
-if print_genomes:
-    import dnaplotlib as dpl
-    dr = dpl.DNARenderer()
-    part_renderers = dr.SBOL_part_renderers()
-sp = {'type':'EmptySpace', 'name':'S1', 'fwd':True, 'opts':{'x_extent':3}} #spacer
-Fgn = {'type':'UserDefined', 'name':'ud' , 'fwd':True, 'opts':{'color':(0.0,0.5,0.9),'x_extent':2, 'y_extent':7 } } #blue gene - fitness
-Agn = {'type':'UserDefined', 'name':'ud' , 'fwd':True, 'opts':{'color':(0.9,0.5,0.1),'x_extent':2, 'y_extent':7 } } #orange gene - antibiotic
-Bp = {'type':'Ribozyme', 'name':'bla', 'fwd':True, 'opts':{'color':(0.05,0.6,0.4),'x_extent':7, 'y_extent':11 } }  #break point
-l_drawgenes=[Fgn,Agn,Bp]
-l_genes=['F','A','B']
-designs=[]
-print("Ancestor list: ", l_ancestor)
-import copy
-# print some genomes and ther offspring
-def MakeDesign(genomeseq):
-    # print ("Seq:", genomeseq)
-    design = [sp]
-    for pos,x in enumerate(genomeseq):
-        # if pos == 0:
-        #     # len_block=1 
-        #     # continue
-        #     design.append( l_drawgenes[l_genes.index(x)] )
-        #     # design.append(sp)
-        if pos>0 and x != genomeseq[pos-1] : 
-            design.append(sp)
-        design.append( l_drawgenes[l_genes.index(x)] )
-        # else:
-        #     which_gene = l_genes.index(genomeseq[pos-len_block])
-        #     draw_gene = copy.deepcopy( l_drawgenes[ which_gene ] ) # copies dict
-        #     print ("len_block = ", len_block)
-        #     if which_gene == 'B':
-        #         for _ in len_block:
-        #             design.append( draw_gene )
 
-        #     else:
-        #         draw_gene['opts']['x_extent'] = len_block*draw_gene['opts']['x_extent']
-        #         #   print(draw_gene['opts']['x_extent'])
-        #         design.append( draw_gene )
-        #     design.append(sp)
-        #     len_block=1
-    design.append(sp)
-    return design
-
-print("Keys d_genome", [key for key in d_genomes])
-
-for ancestor in l_ancestor:
-    if d_genomes[ancestor]["howmany"]>2500:
-        print("Ancestor:") 
-        print(ancestor, d_genomes[ancestor]["howmany"],d_genomes[ancestor]["ab_prod"])
-    l_repr_ab_for_lollyplot.append( [d_genomes[ancestor]["howmany"],d_genomes[ancestor]["ab_prod"], ancestor ] )
-    
-    # print("Offspring",) 
-    designs.append(MakeDesign(ancestor))
-    tot_deltaab += d_genomes[ancestor]["ab_prod"]
-    for offs_seq in sorted(d_gnm_and_offs[ancestor],reverse=True):
-        if offs_seq == ancestor: continue
-        # print(offs_seq,d_genomes[offs_seq]["howmany"],d_genomes[offs_seq]["ab_prod"])
-        l_repr_ab_for_lollyplot.append( [d_genomes[offs_seq]["howmany"],d_genomes[offs_seq]["ab_prod"],offs_seq] )
-        ldeltaf_po.append( ancestor.count("F") - offs_seq.count("F") )
-        ldeltaab.append( d_genomes[ancestor]["ab_prod"] - d_genomes[offs_seq]["ab_prod"])
-        tot_deltaab += d_genomes[offs_seq]["ab_prod"]
-        designs.append(MakeDesign(offs_seq))
-        
-        # design = [sp]
-        # for x in offs_seq:
-        #     design.append( l_drawgenes[l_genes.index(x)] )
-        #     design.append(sp)
-        # designs.append(design)
-    ldeltaab=[x/float(tot_deltaab) for x in ldeltaab]
-    # print("Genome: ", designs[-1])
-if print_genomes:
-    fig = plt.figure(figsize=(8,6))
-    #print(designs)
-    gs = gridspec.GridSpec( len(designs), 2+ sum([ x['opts']['x_extent'] for x in designs[0] ]) )
-
-    ax_dna=[]
-    for i in range( len(designs) ):
-        if i==0:
-            ax_dna.append( plt.subplot( gs[i,1:] ) )
-        else:
-            ax_dna.append( plt.subplot( gs[i, 1:  sum([ x['opts']['x_extent'] for x in designs[i] ])   ] ) )
-        # ax_dna2 = plt.subplot(gs[1])
-
-        start, end = dr.renderDNA(ax_dna[i], designs[i], part_renderers)
-        print (i, start,end)
-        ax_dna[i].set_xlim([start, end])
-        ax_dna[i].set_ylim([-15,28])
-        ax_dna[i].set_aspect('equal')
-        ax_dna[i].set_xticks([])
-        ax_dna[i].set_yticks([])
-        ax_dna[i].axis('off')
-
-    for i,my_ax in enumerate(ax_dna): 
-        set_size(len(designs[i]),5, ax=my_ax)
-    # plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01, wspace=0.01)
-
-    # fig.tight_layout()
-    plt.savefig("pretty.pdf")
-    sys.exit(1)
-# else:
-    #lollyplots
-
-print()
-
-# PARENT-OFFSPRING DIFFERENCES, AS A FUNCTION OF Delta(F)
 print ("Hello 1")
 max_nr_F=0
-# sys.exit(1)
-# ldeltaf_po=[]
-# ldeltaab=[]
-# tot_deltaab=0
-# print("Warning - making only for ancestor - rest of colony relation")
-# if False and len(l_ancestor)==1:
-#     ancestor=l_ancestor[0]
 for key in dg:
     max_nr_F = max(dg[key]["gnm"].count("F") , max_nr_F)
-#         l_this_deltaab=[]
-#         tot_deltaab = dg[key]["A"]
-#         howmany_offs1=0
-#         for offs_tag in dg[key]["offs_tag"]:
-#             if offs_tag in dg:
-#                 # print(dg[key]["A"] , dg[offs_gnm]["A"])
-                
-#                 # deltaab = dg[key]["A"]/float(dg[key]["death"] - dg[key]["birth"]) - dg[offs_tag]["A"]/float(dg[key]["death"] - dg[key]["birth"])
-#                 # Just a try: divide by total AB prod by the colony- BELOW
-#                 deltaab = dg[key]["A"] - dg[offs_tag]["A"]
-#                 tot_deltaab += dg[offs_tag]["A"]
-#                 howmany_offs1+=1
-#                 # if deltaab> 50000: 
-#                 #     print("Mother gnm, ab: ",key,dg[key]["A"], " Offsp gnm, ab", offs_tag, dg[offs_tag]["A"] )
-#                 l_this_deltaab.append( deltaab )
-#                 # ldeltagr.append( dg[key]["R"] - dg[offs_gnm]["R"] )
-#                 ldeltaf_po.append( dg[key]["gnm"].count("F") - dg[offs_tag]["gnm"].count("F") )
-#                 if ldeltaf_po[-1]==1 and deltaab>0:
-#                     print(dg[key]["gnm"])
-#                     print(dg[offs_tag]["gnm"])
-#                     print()
-#             #else:
-#             #    # else this guy did nothing - what a whimp!
-#         #normalise Delta(AB prod) by tot ab production
-#         # we have to normalise the last howmany_offs1
-#         # print ("TOT AB: ", tot_deltaab)
-#         # print("")
-#         # l_this_deltaab=[ x/float(tot_deltaab ) if tot_deltaab>0 else 0. for x in l_this_deltaab ]
-#         ldeltaab.extend( l_this_deltaab ) # Now ldeltaf_po will be in sync with ldeltaab
-
-print ("Hello 2")
-# Make averages and std
-max_deltaf=max(ldeltaf_po)
-print("max_deltaf parent-offspr: ",max_deltaf)
-l1 = [[] for _ in range(1+max(ldeltaf_po))] # thanks past me - WTF is l1?
-# print("l1: ",l1)
-for df,ab in zip(ldeltaf_po,ldeltaab):
-    l1[df].append(ab)
-#Sometimes some positions in l1 are not filled
-
-print ("Hello 2.1")
-# print ("l1 = ", l1)
-lavr_deltaab = [np.mean(x) if x!=[] else 0 for x in l1 ]
-lstd_deltaab = [np.std(x) if x!=[] else 0 for x in l1 ]
-print ("Hello 2.2")
-lmedian_deltaab = [np.median(x) if x!=[] else 0 for x in l1 ]
-print ("Hello 2.3")
-l25perc_deltaab = [np.percentile(x,25) if x!=[] else 0 for x in l1 ]
-print ("Hello 2.4")
-l75perc_deltaab = [np.percentile(x,75)  if x!=[] else 0 for x in l1 ]
 
 print ("Hello 3")
 #first thing to check: Who makes AB and who reproduces:
@@ -361,15 +207,33 @@ for key in dg:
         # hist_thisdeltaf,bins = np.histogram( this_deltaf, bins = np.linspace(0.,1.1,num=11) )
         # ldeltaF2.append([x/len_thisdeltaf for x in hist_thisdeltaf])
 
+def extractLabor(dg, max_nr_F):
+    lab=[0 for _ in range(max_nr_F+1)]
+    lrepl=[0 for _ in range(max_nr_F+1)]
+    ldeltaF=[]
+    for key in dg:
+        me_nr_F = dg[key]["gnm"].count("F")
+        lab[ me_nr_F ]+= dg[key]["A"] 
+        lrepl[ me_nr_F ]+= dg[key]["R"]
+        
+        
+        # if len(dg[key]["offs_tag"])>0:
+        #     this_deltaf=[]
+        #     for offs_tag in dg[key]["offs_tag"]:
+
+        #         #deltaFfract = ( dg[key]["gnm"].count("F") - dg[offs_tag]["gnm"].count("F") )/(float( dg[key]["gnm"].count("F") ))
+        #         #ldeltaF.append( deltaFfract )
+    return lab, lrepl
+
+lab_nominal, lrepl_nominal =extractLabor(dg_nominal, max_nr_F)
+lab_stress, lrepl_stress =extractLabor(dg_stress, max_nr_F)
+
+print(lrepl_stress)
+
+
 hist_df, bin_edgesdf = np.histogram( ldeltaF, bins = np.linspace(0.,1.05,num=21) )
 hist_df = [x/float(len(dg)) for x in hist_df]
 
-# ldeltaF2 = [list(i) for i in zip(*ldeltaF2)] # so we have it per-bin - bins defined by the linespace 3 lines above
-# print("Here0")
-# lmedian_deltaf2 = [np.median(x) for x in ldeltaF2]
-# lmean_deltaf2 = [np.mean(x) for x in ldeltaF2]
-# l25per_deltaf2 = [np.percentile(x,25) for x in ldeltaF2]
-# l75per_deltaf2 = [np.percentile(x,75) for x in ldeltaF2]
 
 print("Plotting")
 
@@ -386,37 +250,35 @@ print(ax)
 sum_lab=sum(lab)
 sum_repl=sum(lrepl)
 
-# print("WARNING TURN THESE TWO LINES BACK ON WHEN YOU ARE DONE!!!")
-#normalised
-ax[0][0].plot(range(max_nr_F+1),[x/float(sum_lab) for x in lab],label="AB produced")
-ax[0][0].plot(range(max_nr_F+1),[x/float(sum_repl) for x in lrepl],label="Replication")
+sum_lab_nominal=sum(lab_nominal)
+sum_repl_nominal=sum(lrepl_nominal)
 
-# # d_genomes[gnm]={"ab_prod": dg[key]["A"],  "howmany": 1 , "howmany_offs":len(dg[key]["offs_tag"]) , "earliest": dg[key]["birth"] }
-# l_gnm_ab_nrg = (max_nr_F+1)*[0]
-# l_gnm_howmany_nrg = (max_nr_F+1)*[0]
-# l_ab_vs_howmany = []
-# for genome in d_genomes:
-#     l_ab_vs_howmany.extend( [[genome.count("F"), math.log10( d_genomes[genome]["ab_prod"] ) if d_genomes[genome]["ab_prod"]!=0 else 0 ] for _ in range(d_genomes[genome]["howmany"])] )
-#     #nr_g = genome.count("F")
-#     #l_gnm_ab_nrg[nr_g] += d_genomes[genome]["ab_prod"]
-#     #l_gnm_howmany_nrg[nr_g] += d_genomes[genome]["howmany"]
+sum_lab_stress=sum(lab_stress)
+sum_repl_stress=sum(lrepl_stress)
 
-# l_ab_vs_howmany = [*zip(*l_ab_vs_howmany)]
-# H,xedges,yedges = np.histogram2d( l_ab_vs_howmany[1],l_ab_vs_howmany[0], bins=(20, range(-1,20,1)) )
-# xx, yy = np.meshgrid(xedges, yedges)
-# cmap = copy.copy(mpl.cm.get_cmap("gist_earth_r"))
-# pcm = ax[0][0].pcolormesh(xx[:-1], yy[:-1], H.T,cmap=cmap)
 
-# ax[0][0].scatter(l_ab_vs_howmany[1],l_ab_vs_howmany[0], s= l_ab_vs_howmany[2], alpha=0.2)
-# ax[0][0].set_xscale('log')
-# ax[0][0].set_yscale('log')
 
-#ax[0][0].plot(range(max_nr_F+1), l_gnm_ab_nrg ,label="AB produced gnm")
-#ax[0][0].plot(range(max_nr_F+1), l_gnm_howmany_nrg ,label="how many gnm")
+# ax[0][0].plot(range(max_nr_F+1),[x/float(sum_lab) for x in lab_nominal],label="AB produced (nominal)", color='blue')
+# ax[0][0].plot(range(max_nr_F+1),[x/float(sum_repl) for x in lrepl_nominal],label="Replication (nominal)", color='orange')
 
-# non-normalised
-# ax[0][0].plot(range(max_nr_F+1),[x for x in lab],label="AB produced")
-# ax[0][0].plot(range(max_nr_F+1),[x for x in lrepl],label="Replication")
+# ax[0][0].plot(range(max_nr_F+1),[x/float(sum_lab) for x in lab_stress],label="AB produced (stress)", linestyle = 'dotted', color='blue')
+# ax[0][0].plot(range(max_nr_F+1),[x/float(sum_repl) for x in lrepl_stress],label="Replication (stress)", linestyle = 'dotted', color='orange')
+
+
+ax[0][0].plot(range(max_nr_F+1),[x for x in lab_nominal],label="AB produced (nominal)", color='blue')
+#ax[0][0].plot(range(max_nr_F+1),[x/float(sum_repl) for x in lrepl_nominal],label="Replication (nominal)", color='orange')
+
+ax[0][0].plot(range(max_nr_F+1),[x for x in lab_stress],label="AB produced (stress)", linestyle = 'dotted', color='blue')
+#ax[0][0].plot(range(max_nr_F+1),[x/float(sum_repl) for x in lrepl_stress],label="Replication (stress)", linestyle = 'dotted', color='orange')
+
+#ax[1][0].plot(range(max_nr_F+1),[x/float(sum_lab) for x in lab_nominal],label="AB produced (nominal)", color='blue')
+ax[1][0].plot(range(max_nr_F+1),[x for x in lrepl_nominal],label="Replication (nominal)", color='orange')
+
+#ax[1][0].plot(range(max_nr_F+1),[x/float(sum_lab) for x in lab_stress],label="AB produced (stress)", linestyle = 'dotted', color='blue')
+ax[1][0].plot(range(max_nr_F+1),[x for x in lrepl_stress],label="Replication (stress)", linestyle = 'dotted', color='orange')
+
+
+
 
 ax[0][0].set_xlabel("Nr. of Growth-promoting genes")
 ax[0][0].legend()
@@ -454,15 +316,15 @@ ax[0][1].set_xlim([0.,1.])
 # ax[2].plot(range(1+max(ldeltaf_po)), lavr_deltaab )
 # ax[2].fill_between(range(1+max(ldeltaf_po)), [x+y for x,y in zip(lavr_deltaab,lstd_deltaab)],[x-y for x,y in zip(lavr_deltaab,lstd_deltaab)],alpha=0.3 )
 # ax[2].plot(range(1+max(ldeltaf_po)), [x-y for x,y in zip(lavr_deltaab,lstd_deltaab)] )
-ax[1][0].plot(range(1+max(ldeltaf_po)), lmedian_deltaab, label=r'$\Delta$'+" antibiotic production")
-ax[1][0].fill_between(range(1+max(ldeltaf_po)), l25perc_deltaab, l75perc_deltaab, alpha=0.3 )
-ax[1][0].plot( [ 0 , max(ldeltaf_po) ] , [0,0], lw=0.5, c='red', linestyle = 'dotted' ) #a zero line to facilitate comparison
-ax[1][0].set_xlabel(r'$\Delta$'+" nr. growth-promoting genes")
-ax[1][0].legend()
+# ax[1][0].plot(range(1+max(ldeltaf_po)), lmedian_deltaab, label=r'$\Delta$'+" antibiotic production")
+# ax[1][0].fill_between(range(1+max(ldeltaf_po)), l25perc_deltaab, l75perc_deltaab, alpha=0.3 )
+# ax[1][0].plot( [ 0 , max(ldeltaf_po) ] , [0,0], lw=0.5, c='red', linestyle = 'dotted' ) #a zero line to facilitate comparison
+# ax[1][0].set_xlabel(r'$\Delta$'+" nr. growth-promoting genes")
+# ax[1][0].legend()
 # fig.colorbar(pcm)
 # c = ax.imshow(H,interpolation ='none', origin ='lower') 
 # plt.tight_layout()
-print("l_repr_ab_for_lollyplot",l_repr_ab_for_lollyplot)
+#print("l_repr_ab_for_lollyplot",l_repr_ab_for_lollyplot)
 #makes sense to make lollyplots only if we got founders, otherwise it's a bit messy
 if len(sys.argv)>2:
     #lollyplot
@@ -579,17 +441,19 @@ else:
     l_ab_predicted=[]
     l_hist =[]
     for key in dg:
-        if dg[key]['death'] >= maxtime:
+        #if dg[key]['death'] >= maxtime:
             #this guy is alive now
-            ab_prod = dg[key]['A']
+        ab_prod = dg[key]['A']
             #birthdate = dg[key]['birth']
             #l_ab_prod.append(ab_prod/float(maxtime-birthdate))
-            l_ab_prod.append(ab_prod)
+        l_ab_prod.append(ab_prod)
             #gnm = dg[key]['gnm']
             #nA = gnm.count('A') 
             #nF = gnm.count('F')
             #l_hist.append(nF)
             #l_ab_predicted.append( nA/(nA + 3.)*math.exp(-nF) )
+
+    
     tot_people_here = len(l_ab_prod)
     print("tot people: ", tot_people_here)
     sum_ABs_here = sum(l_ab_prod)
